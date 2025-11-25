@@ -7,90 +7,48 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="gradient-frame"></div>
+  <main id="app" class="shell">
+    <header class="hero">
+      <p class="eyebrow">Shot on Seeker</p>
+      <h1>Watermark-friendly camera for Solana Mobile</h1>
+      <p class="lede">Seeker’s stock camera doesn’t add a brand stamp—this mini web tool does, with automatic device detection, an overlay, and a playful export flow.</p>
+      <p id="status" class="status-pill" aria-live="polite">Detecting device…</p>
+    </header>
 
-  <header class="site-header">
-    <div class="logo">
-      <span class="spark"></span>
-      <span>Solana Mobile</span>
-    </div>
-    <nav>
-      <a href="#camera-page">Seeker Camera</a>
-      <a href="https://solanamobile.com/" target="_blank" rel="noopener">Platform</a>
-      <a href="https://solanamobile.com/" target="_blank" rel="noopener">Developers</a>
-      <a href="https://solanamobile.com/" target="_blank" rel="noopener">Docs</a>
-    </nav>
-    <a class="cta" href="https://solanamobile.com/" target="_blank" rel="noopener">Order Now</a>
-  </header>
-
-  <main id="app" class="page">
-    <section class="hero shell">
-      <div class="hero-text">
-        <p class="eyebrow">Powered by Seeker</p>
-        <h1>Shot on Seeker, sealed on-chain.</h1>
-        <p class="lede">
-          Solana Mobile’s Seeker pairs secure hardware with verified dApps. This camera utility adds the missing “Shot on Seeker” mark for photos captured with the device browser.
-        </p>
-        <div class="hero-cta">
-          <button class="cta-primary" type="button" onclick="document.getElementById('camera-page').scrollIntoView({behavior: 'smooth'});">Open camera</button>
-          <a class="cta-secondary" href="https://solanamobile.com/" target="_blank" rel="noopener">Learn about Seeker</a>
-        </div>
-        <p id="status" class="status-pill" aria-live="polite">Detecting device…</p>
-      </div>
-
-      <div class="hero-device">
-        <div class="device-shell">
-          <div class="device-screen">
-            <span class="device-badge">Seeker</span>
-            <p>The definitive Web3 mobile device.</p>
-            <p class="muted">Secure hardware · Seed Vault · Verified dApp Store</p>
-          </div>
-        </div>
-        <p class="device-caption">Inspired by the Seeker hero block on solanamobile.com.</p>
-      </div>
+    <section id="not-seeker" class="card hidden" aria-live="assertive">
+      <h2>This build targets the Seeker</h2>
+      <p>Open it inside the Solana Mobile Seeker browser to unlock the camera controls. For local testing, append <code>?forceSeeker=true</code> to the URL.</p>
+      <ul>
+        <li>Launch the Companion app on your Seeker and paste this URL.</li>
+        <li>Allow camera + mic permissions so we can render the watermark preview.</li>
+        <li>Need to demo on desktop? Use the URL flag above to bypass detection.</li>
+      </ul>
     </section>
 
-    <section class="panels">
-      <article id="not-seeker" class="card hidden" aria-live="assertive">
-        <h2>This build targets the Seeker</h2>
-        <p>Open inside the Solana Mobile browser to unlock the camera. For desktop demos append <code>?forceSeeker=true</code>.</p>
-        <ul>
-          <li>Launch the Companion app on Seeker, paste this URL, and accept camera permissions.</li>
-          <li>Allow mic access so MediaRecorder can create clips with audio.</li>
-          <li>Need to try off-device? Use the force flag above to bypass detection.</li>
-        </ul>
-      </article>
-
-      <article id="camera-page" class="card hidden" aria-live="polite">
-        <header class="card-heading">
-          <p class="eyebrow">Seeker Camera Utility</p>
-          <h2>Add the Seeker watermark automatically.</h2>
-        </header>
-
-        <div class="live-view">
-          <div class="video-frame">
-            <video id="video" autoplay playsinline muted></video>
-            <div id="live-watermark">Shot on Seeker</div>
-          </div>
-          <canvas id="canvas" class="hidden"></canvas>
+    <section id="camera-page" class="card hidden" aria-live="polite">
+      <div class="live-view">
+        <div class="video-frame">
+          <video id="video" autoplay playsinline muted></video>
+          <div id="live-watermark">Shot on Seeker</div>
         </div>
+        <canvas id="canvas" class="hidden"></canvas>
+      </div>
 
-        <div class="controls">
-          <button id="capture" type="button">Capture photo</button>
-          <button id="start-record" type="button">Start recording</button>
-          <button id="stop-record" type="button" disabled>Stop recording</button>
-          <label for="upload" class="file-input">
-            <span>Import media</span>
-            <input type="file" id="upload" accept="image/*,video/*">
-          </label>
-        </div>
+      <div class="controls">
+        <button id="capture" type="button">Capture photo</button>
+        <button id="start-record" type="button">Start recording</button>
+        <button id="stop-record" type="button" disabled>Stop recording</button>
+        <label for="upload" class="file-input">
+          <span>Import photo/video</span>
+          <input type="file" id="upload" accept="image/*,video/*">
+        </label>
+      </div>
 
-        <p id="permission-error" class="error hidden"></p>
+      <p id="permission-error" class="error hidden"></p>
 
-        <div id="preview" class="preview">
-          <p class="preview-placeholder">Captured photos, uploads, and recordings show up here.</p>
-        </div>
-      </article>
+      <div id="preview" class="preview">
+        <p class="preview-placeholder">Captured photos, uploads, and recordings show up here.</p>
+      </div>
     </section>
   </main>
 
