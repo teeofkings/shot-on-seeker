@@ -10,6 +10,7 @@ const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
+const FORCE_QUERY_PARAM = 'forceSeeker';
 
 const state = {
   mediaRecorder: null,
@@ -85,6 +86,11 @@ async function init() {
 }
 
 async function detectSeekerDevice() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get(FORCE_QUERY_PARAM) === 'true') {
+    return { isSeeker: true };
+  }
+
   const hintString = await collectUserAgentHints();
   const keyword = SEEKER_KEYWORDS.find((needle) => hintString.includes(needle));
   return { isSeeker: Boolean(keyword) };
