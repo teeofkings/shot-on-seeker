@@ -29,6 +29,7 @@ const state = {
   mediaRecorder: null,
   recordedChunks: [],
   stream: null,
+  isSeekerDevice: false,
 };
 
 const watermarkImage = new Image();
@@ -47,13 +48,16 @@ setRecordingState(false);
 
 async function init() {
   const detection = await detectSeekerDevice();
+  state.isSeekerDevice = detection.isSeeker;
   updateStatus(detection);
+  updateLiveWatermarkLabel();
 
-  if (!detection.isSeeker) {
+  if (!detection.allowAccess) {
     notSeeker.classList.remove('hidden');
     return;
   }
 
+  notSeeker.classList.add('hidden');
   cameraPage.classList.remove('hidden');
 
   try {
@@ -76,19 +80,32 @@ function bindUIEvents() {
 async function detectSeekerDevice() {
   const params = new URLSearchParams(window.location.search);
   if (params.get(FORCE_QUERY_PARAM) === 'true') {
-    return { isSeeker: true, reason: 'forced via URL flag' };
+    return { isSeeker: true, reason: 'forced via URL flag', allowAccess: true };
   }
 
-  if (localStorage.getItem(OVERRIDE_STORAGE_KEY) === 'true') {
-    return { isSeeker: true, reason: 'manual override saved' };
+  let storedPreference = null;
+  try {
+    storedPreference = localStorage.getItem(OVERRIDE_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Unable to read override preference', error);
+  }
+
+  if (storedPreference === 'force-seeker' || storedPreference === 'true') {
+    return { isSeeker: true, reason: 'manual override saved', allowAccess: true };
+  }
+
+  if (storedPreference === 'allow-peek') {
+    return { isSeeker: false, reason: 'manual peek override', allowAccess: true };
   }
 
   const hintString = await collectUserAgentHints();
   const keyword = SEEKER_KEYWORDS.find((needle) => hintString.includes(needle));
+  const isSeeker = Boolean(keyword);
 
   return {
-    isSeeker: Boolean(keyword),
-    reason: keyword ? `device hints matched "${keyword}"` : 'no Solana Mobile hints in UA',
+    isSeeker,
+    reason: keyword ? `device hints matched "${keyword}"` : 'no Solana Mobile hints detected',
+    allowAccess: isSeeker,
   };
 }
 
@@ -133,6 +150,13 @@ function updateStatus({ isSeeker, reason }) {
   statusBadge.textContent = isSeeker
     ? `Seeker device detected (${reason})`
     : `Not a Seeker (${reason})`;
+}
+
+function updateLiveWatermarkLabel() {
+  if (!liveWatermark) return;
+  const label = state.isSeekerDevice ? 'Shot on Seeker' : 'Not Shot on a Seeker';
+  liveWatermark.textContent = label;
+  liveWatermark.classList.toggle('non-seeker', !state.isSeekerDevice);
 }
 
 async function startCamera() {
@@ -220,10 +244,11 @@ async function stampWatermark(context, width, height) {
 
   context.save();
   const margin = Math.round(width * 0.03);
-  const text = 'Shot on Seeker';
+  const isSeekerCapture = state.isSeekerDevice;
+  const text = isSeekerCapture ? 'Shot on Seeker' : 'Not Shot on a Seeker';
   const fontSize = Math.max(24, Math.round(width * 0.04));
 
-  if (watermarkImage.complete && watermarkImage.naturalWidth) {
+  if (isSeekerCapture && watermarkImage.complete && watermarkImage.naturalWidth) {
     const maxWidth = width * 0.25;
     const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
     const drawWidth = Math.min(maxWidth, watermarkImage.naturalWidth);
@@ -239,11 +264,11 @@ async function stampWatermark(context, width, height) {
     context.globalAlpha = 1;
   }
 
-  context.font = `600 ${fontSize}px \"Space Grotesk\", \"Inter\", sans-serif`;
+  context.font = `600 ${fontSize}px "Space Grotesk", "Inter", sans-serif`;
   context.textBaseline = 'bottom';
   context.lineWidth = Math.max(6, Math.round(width * 0.004));
   context.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-  context.fillStyle = '#ffffff';
+  context.fillStyle = isSeekerCapture ? '#ffffff' : '#ff9fb0';
   context.strokeText(text, margin, height - margin);
   context.fillText(text, margin, height - margin);
   context.restore();
@@ -350,13 +375,15 @@ function clearError() {
 
 async function handleManualOverride() {
   try {
-    localStorage.setItem(OVERRIDE_STORAGE_KEY, 'true');
+    localStorage.setItem(OVERRIDE_STORAGE_KEY, 'allow-peek');
   } catch (error) {
     console.warn('Unable to persist manual override', error);
   }
 
-  const detection = { isSeeker: true, reason: 'manual override' };
+  state.isSeekerDevice = false;
+  const detection = { isSeeker: false, reason: 'manual peek override', allowAccess: true };
   updateStatus(detection);
+  updateLiveWatermarkLabel();
   notSeeker.classList.add('hidden');
   cameraPage.classList.remove('hidden');
 
