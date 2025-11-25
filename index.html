@@ -7,25 +7,50 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app">
-    <div id="not-seeker" class="hidden">
-      <p>This app is only available on Seeker devices.</p>
-    </div>
+  <main id="app" class="shell">
+    <header class="hero">
+      <p class="eyebrow">Shot on Seeker</p>
+      <h1>Watermark-friendly camera for Solana Mobile</h1>
+      <p class="lede">Seeker’s stock camera doesn’t add a brand stamp—this mini web tool does, with automatic device detection, an overlay, and a playful export flow.</p>
+      <p id="status" class="status-pill" aria-live="polite">Detecting device…</p>
+    </header>
 
-    <div id="camera-page" class="hidden">
-      <video id="video" autoplay playsinline></video>
-      <canvas id="canvas" class="hidden"></canvas>
+    <section id="not-seeker" class="card hidden" aria-live="assertive">
+      <h2>This build targets the Seeker</h2>
+      <p>Open it inside the Solana Mobile Seeker browser to unlock the camera controls. For local testing, append <code>?forceSeeker=true</code> to the URL.</p>
+      <ul>
+        <li>Launch the Companion app on your Seeker and paste this URL.</li>
+        <li>Allow camera + mic permissions so we can render the watermark preview.</li>
+        <li>Need to demo on desktop? Use the URL flag above to bypass detection.</li>
+      </ul>
+    </section>
 
-      <div class="controls">
-        <button id="capture">Capture Image</button>
-        <button id="start-record">Start Recording</button>
-        <button id="stop-record" disabled>Stop Recording</button>
-        <input type="file" id="upload" accept="image/*,video/*">
+    <section id="camera-page" class="card hidden" aria-live="polite">
+      <div class="live-view">
+        <div class="video-frame">
+          <video id="video" autoplay playsinline muted></video>
+          <div id="live-watermark">Shot on Seeker</div>
+        </div>
+        <canvas id="canvas" class="hidden"></canvas>
       </div>
 
-      <div id="preview"></div>
-    </div>
-  </div>
+      <div class="controls">
+        <button id="capture" type="button">Capture photo</button>
+        <button id="start-record" type="button">Start recording</button>
+        <button id="stop-record" type="button" disabled>Stop recording</button>
+        <label for="upload" class="file-input">
+          <span>Import photo/video</span>
+          <input type="file" id="upload" accept="image/*,video/*">
+        </label>
+      </div>
+
+      <p id="permission-error" class="error hidden"></p>
+
+      <div id="preview" class="preview">
+        <p class="preview-placeholder">Captured photos, uploads, and recordings show up here.</p>
+      </div>
+    </section>
+  </main>
 
   <script src="script.js"></script>
 </body>
