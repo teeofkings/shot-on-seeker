@@ -11,9 +11,19 @@ const statusBadge = document.getElementById('status');
 const uploadInput = document.getElementById('upload');
 const permissionError = document.getElementById('permission-error');
 const liveWatermark = document.getElementById('live-watermark');
+const overrideBtn = document.getElementById('manual-override');
 
-const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile'];
+const SEEKER_KEYWORDS = [
+  'seeker',
+  'solana mobile',
+  'solanamobile',
+  'solana-mobile',
+  'solana',
+  'skr',
+  'sm-skr',
+];
 const FORCE_QUERY_PARAM = 'forceSeeker';
+const OVERRIDE_STORAGE_KEY = 'shotOnSeekerOverride';
 
 const state = {
   mediaRecorder: null,
@@ -36,7 +46,7 @@ bindUIEvents();
 setRecordingState(false);
 
 async function init() {
-  const detection = detectSeekerDevice();
+  const detection = await detectSeekerDevice();
   updateStatus(detection);
 
   if (!detection.isSeeker) {
@@ -60,21 +70,62 @@ function bindUIEvents() {
   stopRecordBtn.addEventListener('click', stopRecording);
   uploadInput.addEventListener('change', handleUpload);
   window.addEventListener('beforeunload', shutdownStream);
+  overrideBtn?.addEventListener('click', handleManualOverride);
 }
 
-function detectSeekerDevice() {
+async function detectSeekerDevice() {
   const params = new URLSearchParams(window.location.search);
   if (params.get(FORCE_QUERY_PARAM) === 'true') {
     return { isSeeker: true, reason: 'forced via URL flag' };
   }
 
-  const ua = (navigator.userAgent || '').toLowerCase();
-  const keyword = SEEKER_KEYWORDS.find((needle) => ua.includes(needle));
+  if (localStorage.getItem(OVERRIDE_STORAGE_KEY) === 'true') {
+    return { isSeeker: true, reason: 'manual override saved' };
+  }
+
+  const hintString = await collectUserAgentHints();
+  const keyword = SEEKER_KEYWORDS.find((needle) => hintString.includes(needle));
 
   return {
     isSeeker: Boolean(keyword),
-    reason: keyword ? `user agent matched "${keyword}"` : 'no Solana Mobile hints in UA',
+    reason: keyword ? `device hints matched "${keyword}"` : 'no Solana Mobile hints in UA',
   };
+}
+
+async function collectUserAgentHints() {
+  const hints = [];
+  const ua = (navigator.userAgent || '').toLowerCase();
+  if (ua) hints.push(ua);
+
+  const platform = (navigator.platform || '').toLowerCase();
+  if (platform) hints.push(platform);
+
+  const uaData = navigator.userAgentData;
+  if (uaData) {
+    const brands = uaData.brands || uaData.fullVersionList;
+    if (Array.isArray(brands)) {
+      hints.push(
+        brands
+          .map((entry) => (entry.brand || '').toLowerCase())
+          .filter(Boolean)
+          .join(' ')
+      );
+    }
+    if (typeof uaData.getHighEntropyValues === 'function') {
+      try {
+        const highEntropy = await uaData.getHighEntropyValues(['platform', 'model']);
+        ['platform', 'model'].forEach((key) => {
+          if (highEntropy?.[key]) {
+            hints.push(String(highEntropy[key]).toLowerCase());
+          }
+        });
+      } catch (error) {
+        console.warn('High-entropy UA lookup failed', error);
+      }
+    }
+  }
+
+  return hints.join(' ');
 }
 
 function updateStatus({ isSeeker, reason }) {
@@ -295,6 +346,28 @@ function showError(message) {
 function clearError() {
   permissionError.textContent = '';
   permissionError.classList.add('hidden');
+}
+
+async function handleManualOverride() {
+  try {
+    localStorage.setItem(OVERRIDE_STORAGE_KEY, 'true');
+  } catch (error) {
+    console.warn('Unable to persist manual override', error);
+  }
+
+  const detection = { isSeeker: true, reason: 'manual override' };
+  updateStatus(detection);
+  notSeeker.classList.add('hidden');
+  cameraPage.classList.remove('hidden');
+
+  if (!state.stream) {
+    try {
+      await startCamera();
+    } catch (error) {
+      showError(`Camera error: ${error.message}`);
+      console.error(error);
+    }
+  }
 }
 
 function shutdownStream() {
