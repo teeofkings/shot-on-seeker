@@ -1,147 +1,304 @@
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
 const captureBtn = document.getElementById('capture');
 const startRecordBtn = document.getElementById('start-record');
 const stopRecordBtn = document.getElementById('stop-record');
 const preview = document.getElementById('preview');
 const cameraPage = document.getElementById('camera-page');
 const notSeeker = document.getElementById('not-seeker');
+const statusBadge = document.getElementById('status');
 const uploadInput = document.getElementById('upload');
+const permissionError = document.getElementById('permission-error');
+const liveWatermark = document.getElementById('live-watermark');
 
-let mediaRecorder;
-let recordedChunks = [];
+const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile'];
+const FORCE_QUERY_PARAM = 'forceSeeker';
 
-// --- Device detection ---
-function isSeeker() {
-  const ua = navigator.userAgent.toLowerCase();
-  return ua.includes("seeker"); // customize for Seeker UA
-}
+const state = {
+  mediaRecorder: null,
+  recordedChunks: [],
+  stream: null,
+};
 
-// if (!isSeeker()) {
-//   notSeeker.classList.remove('hidden');
-// } else {
-//   cameraPage.classList.remove('hidden');
+const watermarkImage = new Image();
+watermarkImage.src = 'watermark.png';
 
-// For testing on PC, bypass Seeker detection
-// Remove or comment out the isSeeker() check temporarily
-cameraPage.classList.remove('hidden');
-
-// Camera access
-navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-  .then(stream => {
-    video.srcObject = stream;
-
-    // Prepare MediaRecorder
-    mediaRecorder = new MediaRecorder(stream);
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-
-      const vid = document.createElement('video');
-      vid.src = url;
-      vid.controls = true;
-      preview.innerHTML = '';
-      preview.appendChild(vid);
-
-      // Reset
-      recordedChunks = [];
-    };
-  })
-  .catch(err => {
-    alert('Camera access denied!');
-    console.error(err);
-  });
-
-  // Camera access
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then(stream => {
-      video.srcObject = stream;
-
-      // Prepare MediaRecorder
-      mediaRecorder = new MediaRecorder(stream);
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-
-        const vid = document.createElement('video');
-        vid.src = url;
-        vid.controls = true;
-        preview.innerHTML = '';
-        preview.appendChild(vid);
-
-        // Reset
-        recordedChunks = [];
-      };
-    })
-    .catch(err => {
-      alert('Camera access denied!');
-      console.error(err);
+const watermarkReady = ('decode' in watermarkImage)
+  ? watermarkImage.decode().catch(() => {})
+  : new Promise((resolve, reject) => {
+      watermarkImage.onload = () => resolve();
+      watermarkImage.onerror = reject;
     });
 
+init();
+bindUIEvents();
+setRecordingState(false);
 
-// --- Capture Image ---
-captureBtn.addEventListener('click', () => {
+async function init() {
+  const detection = detectSeekerDevice();
+  updateStatus(detection);
+
+  if (!detection.isSeeker) {
+    notSeeker.classList.remove('hidden');
+    return;
+  }
+
+  cameraPage.classList.remove('hidden');
+
+  try {
+    await startCamera();
+  } catch (error) {
+    showError(`Camera error: ${error.message}`);
+    console.error(error);
+  }
+}
+
+function bindUIEvents() {
+  captureBtn.addEventListener('click', handleCapture);
+  startRecordBtn.addEventListener('click', startRecording);
+  stopRecordBtn.addEventListener('click', stopRecording);
+  uploadInput.addEventListener('change', handleUpload);
+  window.addEventListener('beforeunload', shutdownStream);
+}
+
+function detectSeekerDevice() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get(FORCE_QUERY_PARAM) === 'true') {
+    return { isSeeker: true, reason: 'forced via URL flag' };
+  }
+
+  const ua = (navigator.userAgent || '').toLowerCase();
+  const keyword = SEEKER_KEYWORDS.find((needle) => ua.includes(needle));
+
+  return {
+    isSeeker: Boolean(keyword),
+    reason: keyword ? `user agent matched "${keyword}"` : 'no Solana Mobile hints in UA',
+  };
+}
+
+function updateStatus({ isSeeker, reason }) {
+  if (!statusBadge) return;
+  statusBadge.textContent = isSeeker
+    ? `Seeker device detected (${reason})`
+    : `Not a Seeker (${reason})`;
+}
+
+async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('getUserMedia is not supported in this browser');
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' } },
+    audio: true,
+  });
+
+  state.stream = stream;
+  video.srcObject = stream;
+  clearError();
+  setupMediaRecorder(stream);
+}
+
+function setupMediaRecorder(stream) {
+  if (typeof MediaRecorder === 'undefined') {
+    startRecordBtn.disabled = true;
+    stopRecordBtn.disabled = true;
+    console.warn('MediaRecorder is not supported in this browser.');
+    return;
+  }
+
+  const mimeType = getSupportedMimeType();
+  state.mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+  state.mediaRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) {
+      state.recordedChunks.push(event.data);
+    }
+  };
+
+  state.mediaRecorder.onstop = () => {
+    if (!state.recordedChunks.length) return;
+
+    const blob = new Blob(state.recordedChunks, {
+      type: state.mediaRecorder.mimeType || 'video/webm',
+    });
+    state.recordedChunks = [];
+
+    const url = URL.createObjectURL(blob);
+    showVideoPreview(url);
+  };
+}
+
+function getSupportedMimeType() {
+  if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4',
+  ];
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';
+}
+
+async function handleCapture() {
+  if (cameraPage.classList.contains('hidden')) return;
+  await ensureVideoReady();
+
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0);
+  await stampWatermark(ctx, canvas.width, canvas.height);
 
-  // Add watermark
-  const watermark = new Image();
-  watermark.src = 'watermark.png';
-  watermark.onload = () => {
-    ctx.drawImage(watermark, canvas.width - watermark.width - 10, canvas.height - watermark.height - 10);
-    const dataURL = canvas.toDataURL('image/png');
+  const snapshot = new Image();
+  snapshot.src = canvas.toDataURL('image/png');
+  snapshot.alt = 'Watermarked Seeker capture';
+  snapshot.loading = 'lazy';
+  resetPreview(snapshot);
+}
 
-    const img = document.createElement('img');
-    img.src = dataURL;
-    preview.innerHTML = '';
-    preview.appendChild(img);
-  };
-});
+async function ensureVideoReady() {
+  if (video.readyState >= 2 && video.videoWidth > 0) return;
+  await new Promise((resolve) => {
+    video.addEventListener('loadeddata', resolve, { once: true });
+  });
+}
 
-// --- Start Recording ---
-startRecordBtn.addEventListener('click', () => {
-  if (!mediaRecorder) return;
-  mediaRecorder.start();
-  startRecordBtn.disabled = true;
-  stopRecordBtn.disabled = false;
-});
+async function stampWatermark(context, width, height) {
+  await watermarkReady.catch(() => {});
 
-// --- Stop Recording ---
-stopRecordBtn.addEventListener('click', () => {
-  if (!mediaRecorder) return;
-  mediaRecorder.stop();
-  startRecordBtn.disabled = false;
-  stopRecordBtn.disabled = true;
-});
+  context.save();
+  const margin = Math.round(width * 0.03);
+  const text = 'Shot on Seeker';
+  const fontSize = Math.max(24, Math.round(width * 0.04));
 
-// --- Upload ---
-uploadInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
+  if (watermarkImage.complete && watermarkImage.naturalWidth) {
+    const maxWidth = width * 0.25;
+    const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
+    const drawWidth = Math.min(maxWidth, watermarkImage.naturalWidth);
+    const drawHeight = drawWidth / ratio;
+    context.globalAlpha = 0.95;
+    context.drawImage(
+      watermarkImage,
+      width - drawWidth - margin,
+      height - drawHeight - margin,
+      drawWidth,
+      drawHeight
+    );
+    context.globalAlpha = 1;
+  }
+
+  context.font = `600 ${fontSize}px \"Space Grotesk\", \"Inter\", sans-serif`;
+  context.textBaseline = 'bottom';
+  context.lineWidth = Math.max(6, Math.round(width * 0.004));
+  context.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+  context.fillStyle = '#ffffff';
+  context.strokeText(text, margin, height - margin);
+  context.fillText(text, margin, height - margin);
+  context.restore();
+}
+
+function startRecording() {
+  if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
+  state.recordedChunks = [];
+  state.mediaRecorder.start();
+  setRecordingState(true);
+}
+
+function stopRecording() {
+  if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
+  state.mediaRecorder.stop();
+  setRecordingState(false);
+}
+
+function setRecordingState(isRecording) {
+  startRecordBtn.disabled = isRecording;
+  stopRecordBtn.disabled = !isRecording;
+  if (liveWatermark) {
+    liveWatermark.classList.toggle('recording', isRecording);
+  }
+}
+
+function showVideoPreview(url) {
+  const videoPreview = document.createElement('video');
+  videoPreview.src = url;
+  videoPreview.controls = true;
+  videoPreview.playsInline = true;
+  videoPreview.loop = false;
+  videoPreview.autoplay = false;
+  videoPreview.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
+  resetPreview(videoPreview);
+}
+
+function resetPreview(node) {
+  preview.innerHTML = '';
+  preview.appendChild(node);
+}
+
+function handleUpload(event) {
+  const file = event.target.files[0];
   if (!file) return;
 
-  const url = URL.createObjectURL(file);
-  preview.innerHTML = '';
+  clearError();
 
-  if (file.type.startsWith("image")) {
-    const img = document.createElement('img');
-    img.src = url;
-    preview.appendChild(img);
-  } else if (file.type.startsWith("video")) {
-    const vid = document.createElement('video');
-    vid.src = url;
-    vid.controls = true;
-    preview.appendChild(vid);
+  if (file.type.startsWith('image')) {
+    renderUploadedImage(file);
+  } else if (file.type.startsWith('video')) {
+    renderUploadedVideo(file);
+  } else {
+    showError('Unsupported file type. Please pick an image or video.');
   }
-});
+
+  uploadInput.value = '';
+}
+
+function renderUploadedImage(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = async () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    await stampWatermark(ctx, canvas.width, canvas.height);
+
+    const stamped = new Image();
+    stamped.src = canvas.toDataURL('image/png');
+    stamped.alt = `${file.name} with Seeker watermark`;
+    stamped.loading = 'lazy';
+    resetPreview(stamped);
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    showError('Unable to read that image file.');
+  };
+  img.src = url;
+}
+
+function renderUploadedVideo(file) {
+  const url = URL.createObjectURL(file);
+  const vid = document.createElement('video');
+  vid.src = url;
+  vid.controls = true;
+  vid.playsInline = true;
+  vid.loop = false;
+  vid.autoplay = false;
+  vid.addEventListener('loadeddata', () => URL.revokeObjectURL(url), { once: true });
+  resetPreview(vid);
+}
+
+function showError(message) {
+  permissionError.textContent = message;
+  permissionError.classList.remove('hidden');
+}
+
+function clearError() {
+  permissionError.textContent = '';
+  permissionError.classList.add('hidden');
+}
+
+function shutdownStream() {
+  if (!state.stream) return;
+  state.stream.getTracks().forEach((track) => track.stop());
+  state.stream = null;
+}
