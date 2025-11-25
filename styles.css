@@ -1,255 +1,244 @@
 :root {
   color-scheme: dark;
-  --bg: #040510;
-  --card-bg: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.12);
-  --accent: #a5ffb5;
-  --accent-strong: #52ffcc;
-  --text: #f4f5ff;
-  --muted: rgba(244, 245, 255, 0.72);
-  --danger: #ff6b81;
-  --radius: 20px;
-  --shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  font-family: "Inter", "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --mint: #75bfaa;
+  --midnight: #0c2a38;
+  --coal: #010101;
+  --panel: #2b2b2b;
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-shadow: 0 40px 80px rgba(0, 0, 0, 0.45);
+  --text-strong: #f7f8f9;
+  --text-muted: rgba(247, 248, 249, 0.7);
+  --danger: #ff5b6a;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
-  margin: 0;
   min-height: 100vh;
-  font-family: "Space Grotesk", "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: radial-gradient(circle at top, rgba(82, 255, 204, 0.2), transparent 45%) var(--bg);
-  color: var(--text);
-  display: flex;
-  justify-content: center;
-  padding: 2rem 1rem 3rem;
-}
-
-.shell {
-  width: min(960px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.hero {
-  text-align: center;
-  padding: 1.5rem 1rem 0;
-}
-
-.eyebrow {
-  font-size: 0.85rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin: 0 0 0.5rem;
-}
-
-.hero h1 {
   margin: 0;
-  font-size: clamp(2.2rem, 4vw, 3rem);
-  font-weight: 600;
-}
-
-.lede {
-  margin: 1rem auto 1.5rem;
-  max-width: 560px;
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
+  background: linear-gradient(360deg, var(--coal) 0%, var(--midnight) 50%, var(--mint) 100%);
+  display: flex;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.9rem;
-  background: rgba(165, 255, 181, 0.1);
-  border: 1px solid rgba(165, 255, 181, 0.4);
-  border-radius: 999px;
-  font-size: 0.9rem;
-  color: var(--accent);
-  margin: 0 auto;
+  align-items: center;
+  padding: 24px;
+  font-family: inherit;
+  color: var(--text-strong);
 }
 
-.card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  backdrop-filter: blur(14px);
-  box-shadow: var(--shadow);
+.app-shell {
+  width: min(420px, 100%);
+  display: flex;
+  justify-content: center;
 }
 
-.card h2 {
-  margin-top: 0;
-  font-size: 1.3rem;
+.device-shell {
+  width: 100%;
+  max-width: 390px;
+  height: min(844px, 100vh - 48px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.15));
+  border-radius: 30px;
+  padding: 12px;
+  box-shadow: var(--panel-shadow);
+  display: flex;
 }
 
-.card ul {
-  padding-left: 1.3rem;
-  color: var(--muted);
-  line-height: 1.5;
+.screen {
+  background: var(--panel);
+  border-radius: 22px;
+  border: 1px solid var(--panel-border);
+  width: 100%;
+  padding: 16px 16px 80px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
 }
 
-.live-view {
+.gate {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
+  text-align: center;
+  padding: 32px;
+  gap: 12px;
 }
 
-.video-frame {
+.gate h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.gate p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.gate-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.8rem;
+  color: var(--mint);
+  margin: 0;
+}
+
+.viewfinder {
   position: relative;
-  width: 100%;
-  max-width: 520px;
-  border-radius: calc(var(--radius) * 1.4);
+  flex: 1;
+  border-radius: 32px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.4);
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-video,
-canvas {
+.viewfinder video {
   width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
-  border-radius: calc(var(--radius) * 1.4);
 }
 
 #live-watermark {
   position: absolute;
-  right: 1.2rem;
-  bottom: 1.2rem;
-  padding: 0.4rem 0.75rem;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  right: 24px;
+  bottom: 28px;
+  width: 112px;
+  height: auto;
+  pointer-events: none;
 }
 
-#live-watermark.non-seeker {
-  background: rgba(0, 0, 0, 0.65);
-  border-color: rgba(255, 159, 176, 0.5);
-  color: #ff9fb0;
+.viewfinder-fade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 160px;
+  background: linear-gradient(180deg, rgba(20, 63, 62, 0) 0%, #143f3e 116%);
 }
 
-#live-watermark.recording {
-  background: rgba(255, 77, 109, 0.7);
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 0 16px rgba(255, 77, 109, 0.45);
-}
-
-.controls {
+.control-tray {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.8rem;
-  justify-content: center;
-  margin: 1rem 0 0.5rem;
+  gap: 12px;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 12px 18px;
+  border-radius: 28px;
+  backdrop-filter: blur(16px);
 }
 
-button,
-.file-input {
-  border-radius: 999px;
+.control {
   border: none;
-  padding: 0.85rem 1.7rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-}
-
-button {
-  background: var(--accent-strong);
-  color: #021410;
-  box-shadow: 0 10px 24px rgba(82, 255, 204, 0.35);
-}
-
-button.cta-secondary {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--border);
-  box-shadow: none;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.file-input {
-  position: relative;
-  overflow: hidden;
+  border-radius: 24px;
+  background: #fff;
+  color: #0b0b0b;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
-.file-input input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+  gap: 8px;
+  padding: 14px 20px;
+  font-size: 16px;
+  font-weight: 500;
   cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
 }
 
-.override-hint {
-  margin-top: 0.5rem;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.9rem;
+.control:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.control:active {
+  transform: scale(0.97);
+}
+
+.control .icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+}
+
+.control svg {
+  width: 20px;
+  height: 20px;
+  stroke: #0b0b0b;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.control .label {
+  line-height: 1;
+}
+
+.control.recording,
+.control.recording svg {
+  color: #e70421;
+  stroke: #e70421;
+}
+
+.control.recording {
+  background: #ffe6ea;
+}
+
+.icon-only {
+  padding: 14px;
+  min-width: 48px;
+  justify-content: center;
 }
 
 .error {
-  margin: 0.5rem 0 0;
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 92px;
+  margin: 0;
   color: var(--danger);
   font-weight: 600;
-}
-
-.preview {
-  margin-top: 1rem;
-  min-height: 160px;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius);
-  padding: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   text-align: center;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.preview-placeholder {
-  color: var(--muted);
-  max-width: 320px;
-  margin: 0;
-}
-
-#preview img,
-#preview video {
-  width: 100%;
-  max-width: 520px;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
 }
 
 .hidden {
   display: none !important;
 }
 
-@media (max-width: 600px) {
-  .card {
-    padding: 1.2rem;
+.offscreen {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 420px) {
+  .device-shell {
+    height: calc(100vh - 48px);
+    border-radius: 24px;
   }
 
-  .controls {
-    flex-direction: column;
+  .screen {
+    border-radius: 18px;
+  }
+
+  .control-tray {
+    bottom: 16px;
+    padding: 10px 12px;
+  }
+
+  .control {
+    padding: 12px 16px;
+    font-size: 15px;
+  }
+
+  .icon-only {
+    padding: 12px;
   }
 }
