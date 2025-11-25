@@ -7,53 +7,60 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main id="app" class="shell">
-    <header class="hero">
-      <p class="eyebrow">Shot on Seeker</p>
-      <h1>Watermark-friendly camera for Solana Mobile</h1>
-      <p class="lede">Seeker’s stock camera doesn’t add a brand stamp—this mini web tool does, with automatic device detection, an overlay, and a playful export flow.</p>
-      <p id="status" class="status-pill" aria-live="polite">Detecting device…</p>
-    </header>
-
-    <section id="not-seeker" class="card hidden" aria-live="assertive">
-      <h2>This build targets the Seeker</h2>
-      <p>Open it inside the Solana Mobile Seeker browser to unlock the camera controls. For local testing, append <code>?forceSeeker=true</code> to the URL.</p>
-      <ul>
-        <li>Launch the Companion app on your Seeker and paste this URL.</li>
-        <li>Allow camera + mic permissions so we can render the watermark preview.</li>
-        <li>Need to demo on desktop? Use the URL flag above to bypass detection.</li>
-      </ul>
-      <button id="manual-override" type="button" class="cta-secondary">Not on a Seeker – Can I have a peek? 🫣</button>
-      <p class="override-hint">We’ll remember this choice for this browser until you clear site data.</p>
-    </section>
-
-    <section id="camera-page" class="card hidden" aria-live="polite">
-      <div class="live-view">
-        <div class="video-frame">
+  <main class="app-shell">
+    <div class="device-shell">
+      <section id="camera-page" class="screen hidden" aria-live="polite">
+        <div class="viewfinder">
           <video id="video" autoplay playsinline muted></video>
-          <div id="live-watermark">Shot on Seeker</div>
+          <img id="live-watermark" src="watermark.png" alt="Shot on Seeker watermark" decoding="async">
+          <div class="viewfinder-fade"></div>
         </div>
-        <canvas id="canvas" class="hidden"></canvas>
-      </div>
 
-      <div class="controls">
-        <button id="capture" type="button">Capture photo</button>
-        <button id="start-record" type="button">Start recording</button>
-        <button id="stop-record" type="button" disabled>Stop recording</button>
-        <label for="upload" class="file-input">
-          <span>Import photo/video</span>
-          <input type="file" id="upload" accept="image/*,video/*">
-        </label>
-      </div>
+        <div class="control-tray" role="group" aria-label="Camera controls">
+          <button id="capture" type="button" class="control control-primary">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4.5 7.5h15a2 2 0 012 2v8a2 2 0 01-2 2h-15a2 2 0 01-2-2v-8a2 2 0 012-2z"></path>
+                <circle cx="12" cy="13" r="3.25"></circle>
+                <path d="M8 7.5l1.2-2h5.6l1.2 2"></path>
+              </svg>
+            </span>
+            <span class="label">Capture</span>
+          </button>
 
-      <p id="permission-error" class="error hidden"></p>
+          <button id="record" type="button" class="control control-primary">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <rect x="3.5" y="7" width="10" height="10" rx="2"></rect>
+                <path d="M13.5 10l7-4v12l-7-4"></path>
+              </svg>
+            </span>
+            <span class="label" data-record-label>Record</span>
+          </button>
 
-      <div id="preview" class="preview">
-        <p class="preview-placeholder">Captured photos, uploads, and recordings show up here.</p>
-      </div>
-    </section>
+          <button id="switch-camera" type="button" class="control icon-only" aria-label="Switch camera">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M7 8a4 4 0 016.4-3.2l1.1.82H18"></path>
+                <path d="M17 16a4 4 0 01-6.4 3.2l-1.1-.82H6"></path>
+                <path d="M7 8v-3M17 16v3"></path>
+              </svg>
+            </span>
+          </button>
+        </div>
+
+        <p id="permission-error" class="error hidden" role="alert"></p>
+      </section>
+
+      <section id="seeker-gate" class="screen gate" aria-live="assertive">
+        <p class="gate-eyebrow">Seeker only</p>
+        <h1>This build stays on-device</h1>
+        <p>Open the link inside the Solana Mobile Seeker to unlock the watermark camera.</p>
+      </section>
+    </div>
   </main>
 
+  <canvas id="canvas" class="offscreen" aria-hidden="true"></canvas>
   <script src="script.js"></script>
 </body>
 </html>
