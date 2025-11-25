@@ -169,7 +169,7 @@ function startRenderer() {
     }
 
     state.renderCtx.drawImage(video, 0, 0, width, height);
-    drawWatermark(state.renderCtx, width, height);
+    drawOverlay(state.renderCtx, width, height);
     state.animationFrameId = requestAnimationFrame(draw);
   };
 
@@ -235,7 +235,7 @@ async function handleCapture() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  await stampWatermark(ctx, canvas.width, canvas.height);
+  await stampOverlay(ctx, canvas.width, canvas.height);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -260,26 +260,42 @@ async function ensureVideoReady() {
   });
 }
 
-async function stampWatermark(context, width, height) {
+async function stampOverlay(context, width, height) {
   if (!watermarkLoaded) {
     await watermarkReady.catch(() => {});
   }
-  drawWatermark(context, width, height);
+  drawOverlay(context, width, height);
 }
 
-function drawWatermark(context, width, height) {
+function drawOverlay(context, width, height) {
+  drawGradientOverlay(context, width, height);
+  drawWatermarkImage(context, width, height);
+}
+
+function drawGradientOverlay(context, width, height) {
+  const gradientHeight = Math.max(60, Math.round(height * (138 / 752)));
+  const gradient = context.createLinearGradient(0, height - gradientHeight, 0, height);
+  gradient.addColorStop(0, 'rgba(20, 63, 62, 0)');
+  gradient.addColorStop(1, '#143f3e');
+  context.save();
+  context.fillStyle = gradient;
+  context.fillRect(0, height - gradientHeight, width, gradientHeight);
+  context.restore();
+}
+
+function drawWatermarkImage(context, width, height) {
   if (!watermarkLoaded || !watermarkImage.naturalWidth) return;
-  const margin = Math.round(width * 0.03);
-  const maxWidth = width * 0.3;
+  const edgePadding = Math.max(16, Math.round(width * (24 / 366)));
+  const desiredWidth = Math.round(width * (103 / 366));
   const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
-  const drawWidth = Math.min(maxWidth, watermarkImage.naturalWidth);
+  const drawWidth = Math.min(desiredWidth, watermarkImage.naturalWidth);
   const drawHeight = drawWidth / ratio;
   context.save();
-  context.globalAlpha = 0.95;
+  context.globalAlpha = 0.98;
   context.drawImage(
     watermarkImage,
-    width - drawWidth - margin,
-    height - drawHeight - margin,
+    width - drawWidth - edgePadding,
+    height - drawHeight - edgePadding,
     drawWidth,
     drawHeight
   );
