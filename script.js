@@ -167,27 +167,34 @@ async function ensureVideoReady() {
 async function stampWatermark(context, width, height) {
   await watermarkReady.catch(() => {});
 
-  if (!watermarkImage.complete || !watermarkImage.naturalWidth) {
-    console.warn('watermark.png is missing or failed to load.');
-    return;
+  context.save();
+  const margin = Math.round(width * 0.03);
+  const text = 'Shot on Seeker';
+  const fontSize = Math.max(24, Math.round(width * 0.04));
+
+  if (watermarkImage.complete && watermarkImage.naturalWidth) {
+    const maxWidth = width * 0.25;
+    const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
+    const drawWidth = Math.min(maxWidth, watermarkImage.naturalWidth);
+    const drawHeight = drawWidth / ratio;
+    context.globalAlpha = 0.95;
+    context.drawImage(
+      watermarkImage,
+      width - drawWidth - margin,
+      height - drawHeight - margin,
+      drawWidth,
+      drawHeight
+    );
+    context.globalAlpha = 1;
   }
 
-  context.save();
-  const margin = Math.round(Math.min(width, height) * 0.035);
-  const maxWidth = width * 0.32;
-  const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
-  const drawWidth = Math.min(maxWidth, watermarkImage.naturalWidth);
-  const drawHeight = drawWidth / ratio;
-
-  context.globalAlpha = 0.94;
-  context.drawImage(
-    watermarkImage,
-    width - drawWidth - margin,
-    height - drawHeight - margin,
-    drawWidth,
-    drawHeight
-  );
-  context.globalAlpha = 1;
+  context.font = `600 ${fontSize}px \"Space Grotesk\", \"Inter\", sans-serif`;
+  context.textBaseline = 'bottom';
+  context.lineWidth = Math.max(6, Math.round(width * 0.004));
+  context.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+  context.fillStyle = '#ffffff';
+  context.strokeText(text, margin, height - margin);
+  context.fillText(text, margin, height - margin);
   context.restore();
 }
 
@@ -219,7 +226,7 @@ function showVideoPreview(url) {
   videoPreview.playsInline = true;
   videoPreview.loop = false;
   videoPreview.autoplay = false;
-  videoPreview.addEventListener('loadeddata', () => URL.revokeObjectURL(url), { once: true });
+  videoPreview.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
   resetPreview(videoPreview);
 }
 

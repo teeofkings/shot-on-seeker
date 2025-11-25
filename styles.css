@@ -20,32 +20,11 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: "Space Grotesk", "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--bg);
+  background: radial-gradient(circle at top, rgba(82, 255, 204, 0.2), transparent 45%) var(--bg);
   color: var(--text);
   display: flex;
   justify-content: center;
-  padding: 2.5rem 1rem 3.5rem;
-  position: relative;
-  overflow-x: hidden;
-}
-
-body::before,
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-body::before {
-  background: radial-gradient(circle at 20% -10%, rgba(165, 255, 181, 0.3), transparent 45%),
-    radial-gradient(circle at 80% 0%, rgba(82, 255, 204, 0.25), transparent 40%);
-}
-
-body::after {
-  background: repeating-linear-gradient(120deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 14px);
-  opacity: 0.4;
+  padding: 2rem 1rem 3rem;
 }
 
 .shell {
@@ -53,8 +32,6 @@ body::after {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  position: relative;
-  z-index: 1;
 }
 
 .hero {
@@ -98,28 +75,12 @@ body::after {
 }
 
 .card {
-  position: relative;
-  background: linear-gradient(135deg, rgba(12, 16, 34, 0.8), rgba(7, 11, 26, 0.8));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1.75rem;
-  backdrop-filter: blur(18px);
+  padding: 1.5rem;
+  backdrop-filter: blur(14px);
   box-shadow: var(--shadow);
-  overflow: hidden;
-}
-
-.card::before {
-  content: "";
-  position: absolute;
-  inset: 0.6rem;
-  border-radius: calc(var(--radius) - 10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  pointer-events: none;
-}
-
-.card > * {
-  position: relative;
-  z-index: 1;
 }
 
 .card h2 {
@@ -143,34 +104,37 @@ body::after {
 .video-frame {
   position: relative;
   width: 100%;
-  max-width: 540px;
-  border-radius: calc(var(--radius) * 1.6);
-  padding: 1rem;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  max-width: 520px;
+  border-radius: calc(var(--radius) * 1.4);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 video,
 canvas {
   width: 100%;
   display: block;
-  border-radius: calc(var(--radius) * 1.2);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  border-radius: calc(var(--radius) * 1.4);
 }
 
 #live-watermark {
   position: absolute;
-  right: 1.4rem;
-  bottom: 1.4rem;
-  width: clamp(110px, 22vw, 160px);
-  height: auto;
-  filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.55));
+  right: 1.2rem;
+  bottom: 1.2rem;
+  padding: 0.4rem 0.75rem;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 #live-watermark.recording {
-  animation: throb 1.4s ease-in-out infinite;
+  background: rgba(255, 77, 109, 0.7);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 16px rgba(255, 77, 109, 0.45);
 }
 
 .controls {
@@ -184,18 +148,18 @@ canvas {
 button,
 .file-input {
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 0.85rem 1.8rem;
+  border: none;
+  padding: 0.85rem 1.7rem;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
 button {
-  background: linear-gradient(120deg, rgba(82, 255, 204, 0.9), rgba(165, 255, 181, 0.7));
+  background: var(--accent-strong);
   color: #021410;
-  box-shadow: 0 10px 25px rgba(82, 255, 204, 0.3);
+  box-shadow: 0 10px 24px rgba(82, 255, 204, 0.35);
 }
 
 button:disabled {
@@ -231,7 +195,7 @@ button:disabled {
 .preview {
   margin-top: 1rem;
   min-height: 160px;
-  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
   border-radius: var(--radius);
   padding: 1rem;
   display: flex;
@@ -267,17 +231,5 @@ button:disabled {
 
   .controls {
     flex-direction: column;
-  }
-}
-
-@keyframes throb {
-  0%, 100% {
-    transform: scale(1);
-    filter: drop-shadow(0 10px 24px rgba(255, 77, 109, 0.35));
-  }
-
-  50% {
-    transform: scale(1.04);
-    filter: drop-shadow(0 14px 30px rgba(255, 77, 109, 0.5));
   }
 }
