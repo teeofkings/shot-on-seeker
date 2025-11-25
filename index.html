@@ -8,10 +8,12 @@
 </head>
 <body>
   <main class="device-frame">
-    <section id="camera-page" class="stage hidden" aria-live="polite">
-      <video id="video" autoplay playsinline muted></video>
-      <img id="live-watermark" src="watermark.png" alt="Shot on Seeker watermark" decoding="async">
-      <div class="view-gradient"></div>
+    <section id="camera-page" class="camera hidden" aria-live="polite">
+      <div class="viewport">
+        <video id="video" autoplay playsinline muted></video>
+        <img id="live-watermark" src="watermark.png" alt="Shot on Seeker watermark" decoding="async">
+        <div class="view-gradient"></div>
+      </div>
 
       <div class="control-row" role="group" aria-label="Camera controls">
         <button id="capture" type="button" class="control pill">
@@ -49,7 +51,7 @@
       <p id="permission-error" class="error hidden" role="alert"></p>
     </section>
 
-    <section id="seeker-gate" class="stage gate" aria-live="assertive">
+    <section id="seeker-gate" class="gate" aria-live="assertive">
       <p class="gate-eyebrow">Seeker only</p>
       <h1>This build stays on-device</h1>
       <p>Open the link inside the Solana Mobile Seeker to unlock the watermark camera.</p>
