@@ -162,6 +162,13 @@ button {
   box-shadow: 0 10px 24px rgba(82, 255, 204, 0.35);
 }
 
+button.cta-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -184,6 +191,13 @@ button:disabled {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.override-hint {
+  margin-top: 0.5rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .error {
