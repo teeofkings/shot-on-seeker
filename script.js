@@ -1,147 +1,175 @@
+// DOM Elements
+const app = document.getElementById('app');
+const notSeekerScreen = document.getElementById('not-seeker');
+const cameraPage = document.getElementById('camera-page');
+const resultPage = document.getElementById('result-page');
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
-const captureBtn = document.getElementById('capture');
-const startRecordBtn = document.getElementById('start-record');
-const stopRecordBtn = document.getElementById('stop-record');
-const preview = document.getElementById('preview');
-const cameraPage = document.getElementById('camera-page');
-const notSeeker = document.getElementById('not-seeker');
-const uploadInput = document.getElementById('upload');
+const capturedImage = document.getElementById('captured-image');
+const flashOverlay = document.getElementById('flash');
 
-let mediaRecorder;
-let recordedChunks = [];
+// Buttons
+const simulateSeekerBtn = document.getElementById('simulate-seeker');
+const captureBtn = document.getElementById('capture-btn');
+const flipBtn = document.getElementById('flip-camera');
+const retakeBtn = document.getElementById('retake-btn');
+const saveBtn = document.getElementById('save-btn');
+const shareBtn = document.getElementById('share-btn');
 
-// --- Device detection ---
-function isSeeker() {
-  const ua = navigator.userAgent.toLowerCase();
-  return ua.includes("seeker"); // customize for Seeker UA
+// State
+let stream = null;
+let currentFacingMode = 'environment'; // Start with back camera if possible
+let watermarkImg = null;
+
+// --- Initialization ---
+async function init() {
+  // Preload watermark
+  watermarkImg = new Image();
+  watermarkImg.src = 'watermark.png';
+  
+  if (isSeekerDevice()) {
+    startCamera();
+  } else {
+    notSeekerScreen.classList.remove('hidden');
+  }
 }
 
-// if (!isSeeker()) {
-//   notSeeker.classList.remove('hidden');
-// } else {
-//   cameraPage.classList.remove('hidden');
+// --- Device Detection ---
+function isSeekerDevice() {
+  const ua = navigator.userAgent.toLowerCase();
+  // Check for specific Seeker/Solana Mobile identifiers
+  // This is a guess based on common patterns, user can simulate if needed
+  return ua.includes('seeker') || ua.includes('solana') || ua.includes('saga');
+}
 
-// For testing on PC, bypass Seeker detection
-// Remove or comment out the isSeeker() check temporarily
-cameraPage.classList.remove('hidden');
+// --- Camera Handling ---
+async function startCamera() {
+  notSeekerScreen.classList.add('hidden');
+  cameraPage.classList.remove('hidden');
 
-// Camera access
-navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-  .then(stream => {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+
+  try {
+    const constraints = {
+      video: {
+        facingMode: currentFacingMode,
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    };
+
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
+  } catch (err) {
+    console.error('Error accessing camera:', err);
+    alert('Could not access camera. Please ensure permissions are granted.');
+  }
+}
 
-    // Prepare MediaRecorder
-    mediaRecorder = new MediaRecorder(stream);
+// --- Actions ---
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
+// Simulate Seeker (Dev Mode)
+simulateSeekerBtn.addEventListener('click', () => {
+  startCamera();
+});
 
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
+// Flip Camera
+flipBtn.addEventListener('click', () => {
+  currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+  startCamera();
+});
 
-      const vid = document.createElement('video');
-      vid.src = url;
-      vid.controls = true;
-      preview.innerHTML = '';
-      preview.appendChild(vid);
-
-      // Reset
-      recordedChunks = [];
-    };
-  })
-  .catch(err => {
-    alert('Camera access denied!');
-    console.error(err);
-  });
-
-  // Camera access
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then(stream => {
-      video.srcObject = stream;
-
-      // Prepare MediaRecorder
-      mediaRecorder = new MediaRecorder(stream);
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-
-        const vid = document.createElement('video');
-        vid.src = url;
-        vid.controls = true;
-        preview.innerHTML = '';
-        preview.appendChild(vid);
-
-        // Reset
-        recordedChunks = [];
-      };
-    })
-    .catch(err => {
-      alert('Camera access denied!');
-      console.error(err);
-    });
-
-
-// --- Capture Image ---
+// Capture Photo
 captureBtn.addEventListener('click', () => {
+  // Flash effect
+  flashOverlay.classList.add('flash-active');
+  setTimeout(() => flashOverlay.classList.remove('flash-active'), 100);
+
+  // Setup canvas
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
 
-  // Add watermark
-  const watermark = new Image();
-  watermark.src = 'watermark.png';
-  watermark.onload = () => {
-    ctx.drawImage(watermark, canvas.width - watermark.width - 10, canvas.height - watermark.height - 10);
-    const dataURL = canvas.toDataURL('image/png');
+  // Draw video frame
+  // Check if we need to mirror for user facing camera
+  if (currentFacingMode === 'user') {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+  } else {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
 
-    const img = document.createElement('img');
-    img.src = dataURL;
-    preview.innerHTML = '';
-    preview.appendChild(img);
-  };
+  // Add Watermark
+  addWatermark(ctx, canvas.width, canvas.height);
+
+  // Show result
+  const dataURL = canvas.toDataURL('image/png');
+  capturedImage.src = dataURL;
+  
+  cameraPage.classList.add('hidden');
+  resultPage.classList.remove('hidden');
 });
 
-// --- Start Recording ---
-startRecordBtn.addEventListener('click', () => {
-  if (!mediaRecorder) return;
-  mediaRecorder.start();
-  startRecordBtn.disabled = true;
-  stopRecordBtn.disabled = false;
+function addWatermark(ctx, width, height) {
+  if (!watermarkImg.complete) return;
+
+  // Calculate watermark size (e.g., 25% of screen width)
+  const targetWidth = width * 0.25;
+  const ratio = watermarkImg.height / watermarkImg.width;
+  const targetHeight = targetWidth * ratio;
+
+  // Padding
+  const padding = width * 0.05;
+
+  // Position: Bottom Right
+  const x = width - targetWidth - padding;
+  const y = height - targetHeight - padding;
+
+  // Draw
+  ctx.drawImage(watermarkImg, x, y, targetWidth, targetHeight);
+}
+
+// Retake
+retakeBtn.addEventListener('click', () => {
+  resultPage.classList.add('hidden');
+  cameraPage.classList.remove('hidden');
+  capturedImage.src = '';
 });
 
-// --- Stop Recording ---
-stopRecordBtn.addEventListener('click', () => {
-  if (!mediaRecorder) return;
-  mediaRecorder.stop();
-  startRecordBtn.disabled = false;
-  stopRecordBtn.disabled = true;
+// Save/Download
+saveBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = `seeker-shot-${Date.now()}.png`;
+  link.href = capturedImage.src;
+  link.click();
 });
 
-// --- Upload ---
-uploadInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+// Share (Basic Web Share API)
+shareBtn.addEventListener('click', async () => {
+  if (navigator.share) {
+    try {
+      // Convert base64 to blob for sharing
+      const res = await fetch(capturedImage.src);
+      const blob = await res.blob();
+      const file = new File([blob], 'seeker-shot.png', { type: 'image/png' });
 
-  const url = URL.createObjectURL(file);
-  preview.innerHTML = '';
-
-  if (file.type.startsWith("image")) {
-    const img = document.createElement('img');
-    img.src = url;
-    preview.appendChild(img);
-  } else if (file.type.startsWith("video")) {
-    const vid = document.createElement('video');
-    vid.src = url;
-    vid.controls = true;
-    preview.appendChild(vid);
+      await navigator.share({
+        title: 'Shot on Seeker',
+        text: 'Check out this photo taken with my Solana Seeker!',
+        files: [file]
+      });
+    } catch (err) {
+      console.log('Error sharing:', err);
+    }
+  } else {
+    alert('Sharing is not supported on this device/browser. Please save the image instead.');
   }
 });
+
+// Initialize
+init();

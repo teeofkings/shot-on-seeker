@@ -2,28 +2,61 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Seeker Camera App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Seeker Camera</title>
   <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
   <div id="app">
-    <div id="not-seeker" class="hidden">
-      <p>This app is only available on Seeker devices.</p>
+    <!-- Detection Warning -->
+    <div id="not-seeker" class="overlay-screen hidden">
+      <div class="message-box">
+        <h1>Solana Seeker Only</h1>
+        <p>This exclusive camera experience is designed for the Solana Seeker device.</p>
+        <button id="simulate-seeker" class="secondary-btn">Simulate Seeker (Dev)</button>
+      </div>
     </div>
 
+    <!-- Camera Interface -->
     <div id="camera-page" class="hidden">
-      <video id="video" autoplay playsinline></video>
-      <canvas id="canvas" class="hidden"></canvas>
-
-      <div class="controls">
-        <button id="capture">Capture Image</button>
-        <button id="start-record">Start Recording</button>
-        <button id="stop-record" disabled>Stop Recording</button>
-        <input type="file" id="upload" accept="image/*,video/*">
+      <div class="camera-container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas" class="hidden"></canvas>
+        <div id="flash" class="flash-overlay"></div>
       </div>
 
-      <div id="preview"></div>
+      <div class="controls-overlay">
+        <div class="top-controls">
+          <!-- Placeholder for settings or flash toggle -->
+        </div>
+        
+        <div class="bottom-controls">
+           <div class="gallery-preview" id="gallery-preview">
+             <!-- Last taken photo thumbnail -->
+           </div>
+
+           <button id="capture-btn" class="shutter-btn">
+             <div class="shutter-inner"></div>
+           </button>
+
+           <button id="flip-camera" class="icon-btn">
+             <span class="material-icons">flip_camera_ios</span>
+           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview/Result Screen -->
+    <div id="result-page" class="overlay-screen hidden">
+      <div class="result-container">
+        <img id="captured-image" src="" alt="Captured">
+        <div class="result-actions">
+          <button id="retake-btn" class="icon-btn"><span class="material-icons">close</span></button>
+          <button id="save-btn" class="icon-btn primary"><span class="material-icons">download</span></button>
+          <button id="share-btn" class="icon-btn"><span class="material-icons">share</span></button>
+        </div>
+      </div>
     </div>
   </div>
 
