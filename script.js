@@ -294,7 +294,7 @@ function drawWatermarkImage(context, width, height) {
   context.globalAlpha = 0.98;
   context.drawImage(
     watermarkImage,
-    width - drawWidth - edgePadding,
+    edgePadding,
     height - drawHeight - edgePadding,
     drawWidth,
     drawHeight

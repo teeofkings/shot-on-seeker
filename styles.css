@@ -1,14 +1,14 @@
 :root {
   color-scheme: dark;
   font-family: "Inter", "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --teal: #75bfaa;
-  --deep: #0c2a38;
-  --char: #010101;
+  --mint: #75bfaa;
+  --midnight: #0c2a38;
+  --onyx: #010101;
   --panel: #2b2b2b;
   --text-strong: #f7f8f9;
-  --text-muted: rgba(247, 248, 249, 0.72);
+  --text-muted: rgba(247, 248, 249, 0.7);
   --danger: #ff5b6a;
-  --shadow: 0 40px 90px rgba(0, 0, 0, 0.55);
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
 }
 
 *,
@@ -18,93 +18,100 @@
 }
 
 body {
+  min-height: 100vh;
   margin: 0;
-  height: 100vh;
-  overflow: hidden;
-  background: linear-gradient(360deg, var(--char) 0%, var(--deep) 50%, var(--teal) 100%);
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  background: linear-gradient(360deg, var(--onyx) 0%, var(--midnight) 50%, var(--mint) 100%);
   font-family: inherit;
   color: var(--text-strong);
 }
 
-.device-frame {
-  position: relative;
+.app {
   width: min(390px, 100vw);
-  height: 100vh;
-  border-radius: 24px;
-  padding: 12px;
-  background: linear-gradient(180deg, rgba(1, 1, 1, 0.82) 0%, rgba(12, 42, 56, 0.85) 45%, rgba(117, 191, 170, 0.9) 100%);
+  min-height: 100vh;
+  max-height: 844px;
+  padding: 12px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.35));
+  border-radius: 12px;
   box-shadow: var(--shadow);
-  overflow: hidden;
 }
 
-.camera {
-  position: relative;
+.device,
+.gate {
+  width: min(366px, 100%);
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.device.hidden {
+  display: none;
+}
+
+.viewbox {
   width: 100%;
-  height: 100%;
-}
-
-.viewport {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 12px;
-  bottom: 120px;
   border-radius: 12px;
   overflow: hidden;
+  position: relative;
+  background: #000;
+  aspect-ratio: 366 / 752;
+  max-height: 752px;
 }
 
-.viewport video {
-  position: absolute;
-  width: 162%;
-  height: 752px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-84%, -50%);
+.viewbox video {
+  width: 170%;
+  height: 100%;
   object-fit: cover;
-  pointer-events: none;
-}
-
-#live-watermark {
   position: absolute;
-  bottom: 24px;
-  right: 24px;
-  width: 103px;
-  height: auto;
-  pointer-events: none;
-  z-index: 2;
+  top: 0;
+  left: 50%;
+  transform: translateX(-60%);
 }
 
-.view-gradient {
+.viewbox::after {
+  content: "";
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   height: 138px;
   background: linear-gradient(180deg, rgba(20, 63, 62, 0) 0%, #143f3e 116%);
-  z-index: 1;
+}
+
+#live-watermark {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  width: clamp(80px, 27%, 104px);
+  height: auto;
   pointer-events: none;
+  z-index: 1;
 }
 
 .control-row {
-  position: absolute;
-  bottom: 32px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 315px;
+  width: 100%;
+  max-width: 315px;
   display: flex;
-  gap: 8px;
   align-items: center;
   justify-content: center;
-  z-index: 3;
+  gap: 8px;
 }
 
 .control {
   border: none;
   border-radius: 24px;
-  background: #ffffff;
+  background: #fff;
   color: #181818;
   display: inline-flex;
   align-items: center;
@@ -113,24 +120,20 @@ body {
   font-size: 16px;
   line-height: 19px;
   font-weight: 500;
-  cursor: pointer;
   padding: 14px 20px;
+  cursor: pointer;
   transition: transform 0.2s ease, opacity 0.2s ease;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 15px 45px rgba(0, 0, 0, 0.3);
 }
 
 .control:disabled {
   opacity: 0.4;
-  pointer-events: none;
+  cursor: not-allowed;
   box-shadow: none;
 }
 
 .control:active {
   transform: scale(0.97);
-}
-
-.pill {
-  flex: 0 0 auto;
 }
 
 #capture {
@@ -139,6 +142,7 @@ body {
 
 #record {
   width: 122px;
+  color: #09244b;
 }
 
 .circle {
@@ -163,62 +167,48 @@ body {
   stroke-linejoin: round;
 }
 
-#record {
-  color: #09244b;
-}
-
-#switch-camera {
-  color: #030506;
+.control.recording,
+.control.recording svg {
+  color: #e70421;
 }
 
 .control.recording {
   background: #ffe6ea;
-  color: #e70421;
 }
 
 .error {
-  position: absolute;
-  top: 24px;
-  left: 24px;
-  right: 24px;
-  margin: 0;
+  width: 100%;
   text-align: center;
-  color: var(--danger);
+  margin: 0;
   font-weight: 600;
-  z-index: 4;
+  color: var(--danger);
 }
 
 .gate {
-  position: absolute;
-  inset: 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   text-align: center;
-  padding: 32px;
   gap: 12px;
-  z-index: 5;
 }
 
-.gate h1 {
-  margin: 0;
-  font-size: 1.6rem;
-}
-
-.gate p {
-  margin: 0;
-  color: var(--text-muted);
+.gate.hidden {
+  display: none;
 }
 
 .gate-eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.2em;
   font-size: 0.8rem;
-  color: var(--teal);
+  color: var(--mint);
   margin: 0;
+}
+
+.gate h1 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.gate p {
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .hidden {
@@ -231,4 +221,16 @@ body {
   height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+@media (max-height: 780px) {
+  .app {
+    max-height: none;
+    min-height: auto;
+  }
+
+  .viewbox {
+    aspect-ratio: auto;
+    height: 65vh;
+  }
 }
