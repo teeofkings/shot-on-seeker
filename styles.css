@@ -47,13 +47,13 @@ body {
 .device,
 .gate {
   width: min(90rem, 100vw);
-  height: 100vh;          /* full viewport height */
-  padding: .75rem;        /* included in height via box-sizing */
+  height: 100vh;
+  padding: .75rem .75rem 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1rem;
-  box-sizing: border-box; 
+  flex: 1;
 }
 
 .device.hidden {
@@ -61,15 +61,12 @@ body {
 }
 
 .viewbox {
-   flex: 1;                  /* fill remaining space */
-  min-height: 200px;        /* <-- prevents disappearing, adjust as needed */
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
   position: relative;
   background: #000;
-  aspect-ratio: auto;        /* flexible scaling */
-  max-height: none;
+  flex: 1;
 }
 
 .viewbox video {
@@ -111,7 +108,6 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-bottom: 1rem;
 }
 
 .control {
