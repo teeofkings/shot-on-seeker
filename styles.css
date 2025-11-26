@@ -66,6 +66,9 @@ body {
   overflow: hidden;
   position: relative;
   background: #000;
+  /* allows it to scale while keeping the aspect ratio shape */
+  aspect-ratio: 366 / 752;
+  max-height: 752px;
   flex: 1;
 }
 
