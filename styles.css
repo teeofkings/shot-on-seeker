@@ -26,7 +26,6 @@ body {
   background: linear-gradient(360deg, var(--onyx) 0%, var(--midnight) 50%, var(--mint) 100%);
   font-family: inherit;
   color: var(--text-strong);
-  overflow: hidden;
 }
 
 /* .app {
@@ -48,13 +47,13 @@ body {
 .device,
 .gate {
   width: min(90rem, 100vw);
-  height: 95vh;
-  padding: .75rem .75rem 1rem;
+  height: 100vh;          /* full viewport height */
+  padding: .75rem;        /* included in height via box-sizing */
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1rem;
-  flex: 1;
+  box-sizing: border-box; 
 }
 
 .device.hidden {
@@ -62,16 +61,15 @@ body {
 }
 
 .viewbox {
+   flex: 1;                  /* fill remaining space */
+  min-height: 200px;        /* <-- prevents disappearing, adjust as needed */
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
   position: relative;
   background: #000;
-
-  /* allows it to scale while keeping the aspect ratio shape */
-  aspect-ratio: 366 / 752;
-  max-height: 752px;
-  flex: 1;
+  aspect-ratio: auto;        /* flexible scaling */
+  max-height: none;
 }
 
 .viewbox video {
