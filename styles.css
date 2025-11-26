@@ -26,7 +26,6 @@ body {
   background: linear-gradient(360deg, var(--onyx) 0%, var(--midnight) 50%, var(--mint) 100%);
   font-family: inherit;
   color: var(--text-strong);
-  overflow: hidden;
 }
 
 /* .app {
