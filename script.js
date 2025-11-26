@@ -8,6 +8,7 @@ const recordLabel = document.querySelector('[data-record-label]');
 const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
+const viewbox = document.querySelector('.viewbox');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
@@ -268,12 +269,36 @@ async function stampOverlay(context, width, height) {
 }
 
 function drawOverlay(context, width, height) {
-  drawGradientOverlay(context, width, height);
-  drawWatermarkImage(context, width, height);
+  const geometry = computeOverlayGeometry(width, height);
+  drawGradientOverlay(context, width, height, geometry);
+  drawWatermarkImage(context, width, height, geometry);
 }
 
-function drawGradientOverlay(context, width, height) {
-  const gradientHeight = Math.max(60, Math.round(height * (138 / 752)));
+function computeOverlayGeometry(width, height) {
+  const fallbackWidth = 366;
+  const fallbackHeight = 752;
+  const domWidth = Math.max(1, viewbox?.clientWidth || fallbackWidth);
+  const domHeight = Math.max(1, viewbox?.clientHeight || fallbackHeight);
+  const scaleX = width / domWidth;
+  const scaleY = height / domHeight;
+  const cssPadding = 24;
+  const cssGradientHeight = 138;
+  const cssWatermarkWidth = Math.min(104, Math.max(80, domWidth * 0.27));
+  const watermarkAspect =
+    (watermarkImage.naturalWidth && watermarkImage.naturalHeight)
+      ? watermarkImage.naturalWidth / watermarkImage.naturalHeight
+      : 640 / 220;
+  return {
+    padX: cssPadding * scaleX,
+    padY: cssPadding * scaleY,
+    gradientHeight: cssGradientHeight * scaleY,
+    watermarkWidth: cssWatermarkWidth * scaleX,
+    watermarkAspect,
+  };
+}
+
+function drawGradientOverlay(context, width, height, geometry) {
+  const gradientHeight = Math.min(height, Math.max(20, geometry.gradientHeight));
   const gradient = context.createLinearGradient(0, height - gradientHeight, 0, height);
   gradient.addColorStop(0, 'rgba(20, 63, 62, 0)');
   gradient.addColorStop(1, '#143f3e');
@@ -283,19 +308,16 @@ function drawGradientOverlay(context, width, height) {
   context.restore();
 }
 
-function drawWatermarkImage(context, width, height) {
+function drawWatermarkImage(context, width, height, geometry) {
   if (!watermarkLoaded || !watermarkImage.naturalWidth) return;
-  const edgePadding = Math.max(16, Math.round(width * (24 / 366)));
-  const desiredWidth = Math.round(width * (103 / 366));
-  const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
-  const drawWidth = Math.min(desiredWidth, watermarkImage.naturalWidth);
-  const drawHeight = drawWidth / ratio;
+  const drawWidth = Math.min(geometry.watermarkWidth, watermarkImage.naturalWidth);
+  const drawHeight = drawWidth / geometry.watermarkAspect;
   context.save();
   context.globalAlpha = 0.98;
   context.drawImage(
     watermarkImage,
-    edgePadding,
-    height - drawHeight - edgePadding,
+    geometry.padX,
+    height - drawHeight - geometry.padY,
     drawWidth,
     drawHeight
   );
