@@ -47,7 +47,6 @@ body {
   margin: 0;
   display: flex;
   justify-content: center;
-  align-items: center;
   background: linear-gradient(360deg, var(--onyx) 0%, var(--midnight) 50%, var(--mint) 100%);
   font-weight: 400;
   color: var(--text-strong);
@@ -72,12 +71,11 @@ body {
 .device,
 .gate {
   width: min(90rem, 100vw);
-  height: 90vh;
+  height: 92vh;
   padding: .75rem .75rem 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 1rem;
   flex: 1;
 }
