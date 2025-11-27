@@ -114,8 +114,8 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 8.625rem;
-  background: linear-gradient(180deg, rgba(35, 75, 81, 0) 0%, #234B51 116.53%);
+  height: 8rem;
+  background: linear-gradient(180deg, rgba(20, 63, 62, 0) 0%, #143F3E 116.53%);
 }
 
 #live-watermark {

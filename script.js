@@ -8,6 +8,7 @@ const recordLabel = document.querySelector('[data-record-label]');
 const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
+const viewbox = document.querySelector('.viewbox');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
@@ -27,6 +28,8 @@ const state = {
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
+video.addEventListener('loadedmetadata', syncViewboxAspect);
+video.addEventListener('resize', syncViewboxAspect);
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -141,14 +144,13 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: state.facingMode } },
-    audio: true,
-  });
+  const stream = await openCameraStream();
 
   state.stream = stream;
   video.srcObject = stream;
+  await maximizeTrackResolution(stream);
   await ensureVideoReady();
+  syncViewboxAspect();
   startRenderer();
   setupMediaRecorder();
 }
@@ -254,9 +256,19 @@ async function handleCapture() {
 }
 
 async function ensureVideoReady() {
-  if (video.readyState >= 2 && video.videoWidth > 0) return;
+  if (video.readyState >= 2 && video.videoWidth > 0) {
+    syncViewboxAspect();
+    return;
+  }
   await new Promise((resolve) => {
-    video.addEventListener('loadeddata', resolve, { once: true });
+    video.addEventListener(
+      'loadeddata',
+      () => {
+        syncViewboxAspect();
+        resolve();
+      },
+      { once: true }
+    );
   });
 }
 
@@ -338,6 +350,96 @@ async function switchCamera() {
   } finally {
     switchBtn.disabled = false;
   }
+}
+
+async function openCameraStream() {
+  const candidates = buildCameraConstraintSets();
+  let lastError = null;
+
+  for (const constraints of candidates) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+      console.warn('Camera constraint attempt failed', error);
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error('Unable to access the camera with the requested constraints');
+}
+
+function buildCameraConstraintSets() {
+  const facingMode = { ideal: state.facingMode };
+  const resolutionHints = createResolutionHints();
+
+  return [
+    {
+      video: {
+        facingMode,
+        width: { ideal: 3840 },
+        height: { ideal: 2160 },
+        advanced: resolutionHints,
+      },
+      audio: true,
+    },
+    {
+      video: {
+        facingMode,
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
+      },
+      audio: true,
+    },
+    {
+      video: { facingMode },
+      audio: true,
+    },
+  ];
+}
+
+function createResolutionHints() {
+  const presets = [
+    { width: 4096, height: 2304 },
+    { width: 3840, height: 2160 },
+    { width: 3072, height: 1728 },
+    { width: 2560, height: 1440 },
+    { width: 1920, height: 1080 },
+  ];
+
+  return presets.flatMap(({ width, height }) => [
+    { width, height },
+    { width: height, height: width },
+  ]);
+}
+
+async function maximizeTrackResolution(stream) {
+  const [videoTrack] = stream.getVideoTracks();
+  if (!videoTrack?.getCapabilities || !videoTrack.applyConstraints) return;
+  const capabilities = videoTrack.getCapabilities();
+  const maxWidth = capabilities.width?.max;
+  const maxHeight = capabilities.height?.max;
+  if (!maxWidth || !maxHeight) return;
+
+  try {
+    await videoTrack.applyConstraints({
+      width: { ideal: maxWidth },
+      height: { ideal: maxHeight },
+    });
+  } catch (error) {
+    console.warn('Unable to maximize camera resolution', error);
+  }
+}
+
+function syncViewboxAspect() {
+  if (!viewbox) return;
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return;
+  viewbox.style.setProperty('--camera-aspect', `${width} / ${height}`);
 }
 
 function downloadBlob(blob, filename) {
