@@ -25,8 +25,6 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
-  renderSource: null,
-  captureSource: null,
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -247,20 +245,10 @@ async function handleCapture() {
     return;
   }
 
-  const photoSource = await createHighResSource().catch((error) => {
-    console.warn('High-res photo stream unavailable, falling back to preview', error);
-    return null;
-  });
-
-  const sourceVideo = photoSource?.video || video;
-  const exportSize = photoSource
-    ? { width: photoSource.width, height: photoSource.height }
-    : { width: targetWidth, height: targetHeight };
-
-  canvas.width = exportSize.width;
-  canvas.height = exportSize.height;
-  drawVideoToContext(ctx, sourceVideo, exportSize.width, exportSize.height);
-  await stampOverlay(ctx, exportSize.width, exportSize.height);
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  drawVideoToContext(ctx, video, targetWidth, targetHeight);
+  await stampOverlay(ctx, canvas.width, canvas.height);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -277,9 +265,6 @@ async function handleCapture() {
     );
   });
 
-  if (photoSource) {
-    releaseHighResSource(photoSource);
-  }
 }
 
 async function ensureVideoReady() {
@@ -331,17 +316,8 @@ function drawWatermarkImage(context, width, height) {
   context.restore();
 }
 
-async function startRecording() {
+function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
-  try {
-    state.captureSource = await createHighResSource();
-    state.renderSource = state.captureSource.video;
-  } catch (error) {
-    console.warn('High-res recording stream unavailable, using preview feed', error);
-    state.captureSource = null;
-    state.renderSource = null;
-  }
-
   state.recordedChunks = [];
   state.mediaRecorder.start();
   setRecordingState(true);
@@ -351,11 +327,6 @@ function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
   setRecordingState(false);
-  if (state.captureSource) {
-    releaseHighResSource(state.captureSource);
-    state.captureSource = null;
-  }
-  state.renderSource = null;
 }
 
 function setRecordingState(isRecording) {
@@ -434,11 +405,6 @@ function shutdownStream() {
     state.mixedStream.getTracks().forEach((track) => track.stop());
     state.mixedStream = null;
   }
-  if (state.captureSource) {
-    releaseHighResSource(state.captureSource);
-    state.captureSource = null;
-  }
-  state.renderSource = null;
   state.mediaRecorder = null;
   state.recordedChunks = [];
 }
@@ -466,7 +432,26 @@ function getTargetDimensions() {
 }
 
 function drawVideoToContext(context, source, targetWidth, targetHeight) {
-  drawSourceToContext(context, source, targetWidth, targetHeight);
+  if (!source?.videoWidth || !source?.videoHeight || !targetWidth || !targetHeight) return;
+  const mapping = computeDrawMapping(source.videoWidth, source.videoHeight, targetWidth, targetHeight);
+  const mirror = state.facingMode === 'user';
+  context.save();
+  if (mirror) {
+    context.translate(targetWidth, 0);
+    context.scale(-1, 1);
+  }
+  context.drawImage(
+    source,
+    mapping.sx,
+    mapping.sy,
+    mapping.sw,
+    mapping.sh,
+    0,
+    0,
+    targetWidth,
+    targetHeight
+  );
+  context.restore();
 }
 
 function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) {
@@ -491,98 +476,3 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
   };
 }
 
-function createHighResConstraints() {
-  const facingMode = { ideal: state.facingMode };
-  return [
-    {
-      width: { ideal: 1920, max: 1920 },
-      height: { ideal: 1080, max: 1080 },
-      facingMode,
-    },
-    {
-      width: { ideal: 1280, max: 1280 },
-      height: { ideal: 720, max: 720 },
-      facingMode,
-    },
-    { facingMode },
-  ];
-}
-
-async function createHighResSource() {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error('getUserMedia not supported');
-  }
-  const variants = createHighResConstraints();
-  let lastError = null;
-
-  for (const videoConstraints of variants) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
-      const videoEl = document.createElement('video');
-      Object.assign(videoEl, { autoplay: true, muted: true, playsInline: true });
-      videoEl.srcObject = stream;
-      await ensureVideoElementReady(videoEl);
-      return {
-        stream,
-        video: videoEl,
-        width: videoEl.videoWidth,
-        height: videoEl.videoHeight,
-      };
-    } catch (error) {
-      lastError = error;
-      console.warn('High-res stream attempt failed', videoConstraints, error);
-    }
-  }
-  if (lastError) throw lastError;
-  throw new Error('Unable to create high-resolution stream');
-}
-
-function releaseHighResSource(source) {
-  const stream = source?.stream;
-  const videoEl = source?.video;
-  if (stream) {
-    stream.getTracks().forEach((track) => track.stop());
-  }
-  if (videoEl) {
-    videoEl.srcObject = null;
-  }
-}
-
-async function ensureVideoElementReady(element) {
-  if (element.readyState >= 2 && element.videoWidth > 0) return;
-  await new Promise((resolve) => {
-    element.addEventListener('loadeddata', resolve, { once: true });
-  });
-  if (element.paused) {
-    try {
-      await element.play();
-    } catch (error) {
-      console.warn('Video element play failed', error);
-    }
-  }
-}
-
-function drawSourceToContext(context, source, targetWidth, targetHeight) {
-  const sourceWidth = source?.videoWidth || source?.width || source?.naturalWidth;
-  const sourceHeight = source?.videoHeight || source?.height || source?.naturalHeight;
-  if (!sourceWidth || !sourceHeight) return;
-  const mapping = computeDrawMapping(sourceWidth, sourceHeight, targetWidth, targetHeight);
-  const mirror = state.facingMode === 'user';
-  context.save();
-  if (mirror) {
-    context.translate(targetWidth, 0);
-    context.scale(-1, 1);
-  }
-  context.drawImage(
-    source,
-    mapping.sx,
-    mapping.sy,
-    mapping.sw,
-    mapping.sh,
-    0,
-    0,
-    targetWidth,
-    targetHeight
-  );
-  context.restore();
-}
