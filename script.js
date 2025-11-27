@@ -8,20 +8,15 @@ const recordLabel = document.querySelector('[data-record-label]');
 const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
-const viewbox = document.querySelector('.viewbox');
+const CAMERA_RESOLUTION_HINTS = [
+  { width: 2560, height: 1440 },
+  { width: 1920, height: 1080 },
+  { width: 1600, height: 900 },
+  { width: 1280, height: 720 },
+];
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
-
-const MAX_RENDER_WIDTH = 2560;
-const MAX_RENDER_HEIGHT = 2560;
-const cropCache = {
-  videoWidth: 0,
-  videoHeight: 0,
-  viewWidth: 0,
-  viewHeight: 0,
-  value: null,
-};
 
 const state = {
   mediaRecorder: null,
@@ -38,12 +33,6 @@ const state = {
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
-video.addEventListener('loadedmetadata', syncViewboxAspect);
-video.addEventListener('resize', syncViewboxAspect);
-function handleViewportChange() {
-  clearCropCache();
-  syncViewboxAspect();
-}
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -76,8 +65,6 @@ function bindUIEvents() {
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
-  window.addEventListener('resize', handleViewportChange);
-  window.addEventListener('orientationchange', handleViewportChange);
 }
 
 async function init() {
@@ -164,9 +151,7 @@ async function startCamera() {
 
   state.stream = stream;
   video.srcObject = stream;
-  await maximizeTrackResolution(stream);
   await ensureVideoReady();
-  syncViewboxAspect();
   startRenderer();
   setupMediaRecorder();
 }
@@ -179,35 +164,15 @@ function startRenderer() {
       return;
     }
 
-    const crop = getViewportCrop();
-    const sourceX = crop?.cropX ?? 0;
-    const sourceY = crop?.cropY ?? 0;
-    const sourceWidth = crop?.cropWidth ?? video.videoWidth;
-    const sourceHeight = crop?.cropHeight ?? video.videoHeight;
-    const outputWidth = crop?.outputWidth ?? video.videoWidth;
-    const outputHeight = crop?.outputHeight ?? video.videoHeight;
-
-    if (
-      state.renderCanvas.width !== outputWidth ||
-      state.renderCanvas.height !== outputHeight
-    ) {
-      state.renderCanvas.width = outputWidth;
-      state.renderCanvas.height = outputHeight;
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (state.renderCanvas.width !== width || state.renderCanvas.height !== height) {
+      state.renderCanvas.width = width;
+      state.renderCanvas.height = height;
     }
 
-    state.renderCtx.clearRect(0, 0, outputWidth, outputHeight);
-    state.renderCtx.drawImage(
-      video,
-      sourceX,
-      sourceY,
-      sourceWidth,
-      sourceHeight,
-      0,
-      0,
-      outputWidth,
-      outputHeight
-    );
-    drawOverlay(state.renderCtx, outputWidth, outputHeight);
+    state.renderCtx.drawImage(video, 0, 0, width, height);
+    drawOverlay(state.renderCtx, width, height);
     state.animationFrameId = requestAnimationFrame(draw);
   };
 
@@ -270,26 +235,9 @@ async function handleCapture() {
   if (cameraPage.classList.contains('hidden')) return;
   await ensureVideoReady();
 
-  const crop = getViewportCrop();
-  if (crop) {
-    canvas.width = crop.outputWidth;
-    canvas.height = crop.outputHeight;
-    ctx.drawImage(
-      video,
-      crop.cropX,
-      crop.cropY,
-      crop.cropWidth,
-      crop.cropHeight,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-  } else {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  }
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   await stampOverlay(ctx, canvas.width, canvas.height);
 
   await new Promise((resolve, reject) => {
@@ -309,19 +257,9 @@ async function handleCapture() {
 }
 
 async function ensureVideoReady() {
-  if (video.readyState >= 2 && video.videoWidth > 0) {
-    syncViewboxAspect();
-    return;
-  }
+  if (video.readyState >= 2 && video.videoWidth > 0) return;
   await new Promise((resolve) => {
-    video.addEventListener(
-      'loadeddata',
-      () => {
-        syncViewboxAspect();
-        resolve();
-      },
-      { once: true }
-    );
+    video.addEventListener('loadeddata', resolve, { once: true });
   });
 }
 
@@ -406,6 +344,10 @@ async function switchCamera() {
 }
 
 async function openCameraStream() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('getUserMedia not supported in this browser');
+  }
+
   const candidates = buildCameraConstraintSets();
   let lastError = null;
 
@@ -422,80 +364,26 @@ async function openCameraStream() {
     throw lastError;
   }
 
-  throw new Error('Unable to access the camera with the requested constraints');
+  throw new Error('Unable to access the camera.');
 }
 
 function buildCameraConstraintSets() {
   const facingMode = { ideal: state.facingMode };
-  const resolutionHints = createResolutionHints();
-
-  return [
-    {
-      video: {
-        facingMode,
-        width: { ideal: 2560 },
-        height: { ideal: 1440 },
-        advanced: resolutionHints,
-      },
-      audio: true,
+  const candidates = CAMERA_RESOLUTION_HINTS.map(({ width, height }) => ({
+    video: {
+      facingMode,
+      width: { ideal: width },
+      height: { ideal: height },
     },
-    {
-      video: {
-        facingMode,
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-      },
-      audio: true,
-    },
-    {
-      video: { facingMode },
-      audio: true,
-    },
-  ];
-}
+    audio: true,
+  }));
 
-function createResolutionHints() {
-  const presets = [
-    { width: 2560, height: 1440 },
-    { width: 1920, height: 1080 },
-    { width: 1600, height: 900 },
-    { width: 1280, height: 720 },
-  ];
+  candidates.push({
+    video: { facingMode },
+    audio: true,
+  });
 
-  return presets.flatMap(({ width, height }) => [
-    { width, height },
-    { width: height, height: width },
-  ]);
-}
-
-async function maximizeTrackResolution(stream) {
-  const [videoTrack] = stream.getVideoTracks();
-  if (!videoTrack?.getCapabilities || !videoTrack.applyConstraints) return;
-  const capabilities = videoTrack.getCapabilities();
-  const maxWidth = capabilities.width?.max;
-  const maxHeight = capabilities.height?.max;
-  if (!maxWidth || !maxHeight) return;
-  const targetWidth = Math.min(maxWidth, MAX_RENDER_WIDTH);
-  const targetHeight = Math.min(maxHeight, MAX_RENDER_HEIGHT);
-  if (!targetWidth || !targetHeight) return;
-
-  try {
-    await videoTrack.applyConstraints({
-      width: { ideal: targetWidth, max: targetWidth },
-      height: { ideal: targetHeight, max: targetHeight },
-    });
-  } catch (error) {
-    console.warn('Unable to maximize camera resolution', error);
-  }
-}
-
-function syncViewboxAspect() {
-  clearCropCache();
-  if (!viewbox) return;
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  if (!width || !height) return;
-  viewbox.style.setProperty('--camera-aspect', `${width} / ${height}`);
+  return candidates;
 }
 
 function downloadBlob(blob, filename) {
@@ -551,67 +439,4 @@ function shutdownStream() {
   }
   state.mediaRecorder = null;
   state.recordedChunks = [];
-}
-
-function getViewportCrop() {
-  if (!viewbox) return null;
-  const videoWidth = video.videoWidth;
-  const videoHeight = video.videoHeight;
-  if (!videoWidth || !videoHeight) return null;
-
-  const viewWidth = viewbox.clientWidth;
-  const viewHeight = viewbox.clientHeight;
-  if (!viewWidth || !viewHeight) return null;
-
-  const cacheHit =
-    cropCache.value &&
-    cropCache.videoWidth === videoWidth &&
-    cropCache.videoHeight === videoHeight &&
-    cropCache.viewWidth === viewWidth &&
-    cropCache.viewHeight === viewHeight;
-
-  if (cacheHit) {
-    return cropCache.value;
-  }
-
-  const widthRatio = viewWidth / videoWidth;
-  const heightRatio = viewHeight / videoHeight;
-  const scale = Math.max(widthRatio, heightRatio);
-
-  const cropWidth = viewWidth / scale;
-  const cropHeight = viewHeight / scale;
-  const cropX = (videoWidth - cropWidth) / 2;
-  const cropY = (videoHeight - cropHeight) / 2;
-
-  const maxScale = Math.min(
-    1,
-    MAX_RENDER_WIDTH / cropWidth,
-    MAX_RENDER_HEIGHT / cropHeight
-  );
-  const outputWidth = Math.max(1, Math.round(cropWidth * maxScale));
-  const outputHeight = Math.max(1, Math.round(cropHeight * maxScale));
-  const normalized = {
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-    outputWidth,
-    outputHeight,
-  };
-
-  cropCache.value = normalized;
-  cropCache.videoWidth = videoWidth;
-  cropCache.videoHeight = videoHeight;
-  cropCache.viewWidth = viewWidth;
-  cropCache.viewHeight = viewHeight;
-
-  return normalized;
-}
-
-function clearCropCache() {
-  cropCache.value = null;
-  cropCache.videoWidth = 0;
-  cropCache.videoHeight = 0;
-  cropCache.viewWidth = 0;
-  cropCache.viewHeight = 0;
 }
