@@ -36,9 +36,6 @@ const state = {
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
-video.addEventListener('loadedmetadata', syncViewboxAspect);
-window.addEventListener('resize', syncViewboxAspect);
-window.addEventListener('orientationchange', syncViewboxAspect);
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -161,7 +158,6 @@ async function startCamera() {
   updateMirrorState();
   await applyNaturalZoom(stream);
   await refreshCameraInventory(stream);
-  syncViewboxAspect();
   startRenderer();
   setupMediaRecorder();
 }
