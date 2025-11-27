@@ -90,10 +90,9 @@ body {
   overflow: hidden;
   position: relative;
   background: #000;
-  /* allows it to scale while keeping the aspect ratio shape */
-  aspect-ratio: auto;
-  max-height: none;
-  flex: 1;
+  aspect-ratio: var(--camera-aspect, 3 / 4);
+  max-height: 100%;
+  flex: 0 1 auto;
 }
 
 .viewbox video {
