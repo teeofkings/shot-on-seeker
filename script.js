@@ -245,10 +245,16 @@ async function handleCapture() {
     return;
   }
 
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
+  const { width: exportWidth, height: exportHeight } = getExportDimensions(targetWidth, targetHeight);
+  canvas.width = exportWidth;
+  canvas.height = exportHeight;
+
+  ctx.save();
+  ctx.scale(exportWidth / targetWidth, exportHeight / targetHeight);
   drawVideoToContext(ctx, video, targetWidth, targetHeight);
-  await stampOverlay(ctx, canvas.width, canvas.height);
+  ctx.restore();
+
+  await stampOverlay(ctx, exportWidth, exportHeight);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -473,4 +479,18 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
     sw: sourceWidth,
     sh: sourceHeight,
   };
+}
+
+function getExportDimensions(baseWidth, baseHeight) {
+  const scale = getExportScale();
+  return {
+    width: Math.max(baseWidth, Math.round(baseWidth * scale)),
+    height: Math.max(baseHeight, Math.round(baseHeight * scale)),
+  };
+}
+
+function getExportScale() {
+  const ratio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const desired = Math.max(ratio, 1.5);
+  return Math.min(desired, 3);
 }
