@@ -388,10 +388,9 @@ async function openCameraStream() {
 function buildCameraCandidates() {
   const facingMode = state.facingMode;
   const queue = [];
-  const preferredId = state.preferredDeviceIds[facingMode];
-  if (preferredId) {
-    queue.push(preferredId);
-  }
+  const preferred = state.preferredDeviceIds[facingMode];
+  if (preferred) queue.push(preferred);
+
   (state.cameraInventory[facingMode] || [])
     .map((entry) => entry.deviceId)
     .filter(Boolean)
@@ -611,9 +610,4 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
     sw: sourceWidth,
     sh: sourceHeight,
   };
-}
-
-function syncViewboxAspect() {
-  if (!viewbox || !video.videoWidth || !video.videoHeight) return;
-  viewbox.style.setProperty('--camera-aspect', `${video.videoWidth} / ${video.videoHeight}`);
 }
