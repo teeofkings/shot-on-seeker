@@ -8,13 +8,6 @@ const recordLabel = document.querySelector('[data-record-label]');
 const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
-const viewbox = document.querySelector('.viewbox');
-const CAMERA_RESOLUTION_STEPS = [
-  { width: 1920, height: 1080 },
-  { width: 1600, height: 900 },
-  { width: 1280, height: 720 },
-];
-const TARGET_FRAMERATE = 30;
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
@@ -31,18 +24,9 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
-  isRendererActive: false,
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
-video.addEventListener('loadedmetadata', syncViewboxAspect);
-video.addEventListener('resize', syncViewboxAspect);
-video.addEventListener('play', () => {
-  syncViewboxAspect();
-  setVideoLoadingState(false);
-});
-video.addEventListener('waiting', () => setVideoLoadingState(true));
-setVideoLoadingState(true);
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -153,31 +137,25 @@ async function startCamera() {
     throw new Error('getUserMedia not supported in this browser');
   }
 
-  setVideoLoadingState(true);
   clearError();
   stopRenderer();
   shutdownStream();
 
-  try {
-    const stream = await openCameraStream();
-    state.stream = stream;
-    video.srcObject = stream;
-    updateMirrorState();
-    await ensureVideoReady();
-    syncViewboxAspect();
-    setupMediaRecorder();
-    setVideoLoadingState(false);
-  } catch (error) {
-    setVideoLoadingState(false);
-    throw error;
-  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: state.facingMode } },
+    audio: true,
+  });
+
+  state.stream = stream;
+  video.srcObject = stream;
+  await ensureVideoReady();
+  startRenderer();
+  setupMediaRecorder();
 }
 
 function startRenderer() {
-  if (!state.renderCtx || state.isRendererActive) return;
-  state.isRendererActive = true;
+  if (!state.renderCtx) return;
   const draw = () => {
-    if (!state.isRendererActive) return;
     if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
@@ -190,7 +168,6 @@ function startRenderer() {
       state.renderCanvas.height = height;
     }
 
-    state.renderCtx.clearRect(0, 0, width, height);
     state.renderCtx.drawImage(video, 0, 0, width, height);
     drawOverlay(state.renderCtx, width, height);
     state.animationFrameId = requestAnimationFrame(draw);
@@ -200,8 +177,6 @@ function startRenderer() {
 }
 
 function stopRenderer() {
-  if (!state.isRendererActive) return;
-  state.isRendererActive = false;
   if (state.animationFrameId) {
     cancelAnimationFrame(state.animationFrameId);
     state.animationFrameId = null;
@@ -329,7 +304,6 @@ function drawWatermarkImage(context, width, height) {
 
 function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
-  startRenderer();
   state.recordedChunks = [];
   state.mediaRecorder.start();
   setRecordingState(true);
@@ -339,7 +313,6 @@ function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
   setRecordingState(false);
-  stopRenderer();
 }
 
 function setRecordingState(isRecording) {
@@ -364,57 +337,6 @@ async function switchCamera() {
     console.error(error);
   } finally {
     switchBtn.disabled = false;
-  }
-}
-
-async function openCameraStream() {
-  const constraintsList = CAMERA_RESOLUTION_STEPS.map(({ width, height }) => ({
-    video: {
-      facingMode: { ideal: state.facingMode },
-      width: { ideal: width, max: width },
-      height: { ideal: height, max: height },
-      frameRate: { ideal: TARGET_FRAMERATE, max: TARGET_FRAMERATE },
-      advanced: [{ width, height, frameRate: TARGET_FRAMERATE }],
-    },
-    audio: true,
-  }));
-
-  constraintsList.push({
-    video: { facingMode: { ideal: state.facingMode } },
-    audio: true,
-  });
-
-  let lastError = null;
-  for (const constraints of constraintsList) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      applyStreamHints(stream);
-      return stream;
-    } catch (error) {
-      lastError = error;
-      console.warn('Camera constraints failed', constraints.video, error);
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  throw new Error('Unable to start camera stream');
-}
-
-function applyStreamHints(stream) {
-  const [videoTrack] = stream.getVideoTracks();
-  if (!videoTrack) return;
-  try {
-    videoTrack.applyConstraints({
-      frameRate: { ideal: TARGET_FRAMERATE, max: TARGET_FRAMERATE },
-    }).catch(() => {});
-    if ('contentHint' in videoTrack) {
-      videoTrack.contentHint = 'motion';
-    }
-  } catch (error) {
-    console.warn('Unable to optimize camera track', error);
   }
 }
 
@@ -449,7 +371,6 @@ function clearError() {
 
 function shutdownStream() {
   stopRenderer();
-  setVideoLoadingState(true);
   if (state.isRecording) {
     try {
       state.mediaRecorder?.stop();
@@ -472,23 +393,4 @@ function shutdownStream() {
   }
   state.mediaRecorder = null;
   state.recordedChunks = [];
-}
-
-function syncViewboxAspect() {
-  if (!viewbox) return;
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  if (!width || !height) return;
-  viewbox.style.setProperty('--camera-aspect', `${width} / ${height}`);
-}
-
-function updateMirrorState() {
-  const shouldMirror = state.facingMode === 'user';
-  video.classList.toggle('mirrored', shouldMirror);
-}
-
-function setVideoLoadingState(isLoading) {
-  const loading = Boolean(isLoading);
-  video.classList.toggle('camera-loading', loading);
-  video.classList.toggle('camera-ready', !loading);
 }
