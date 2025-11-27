@@ -25,6 +25,8 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
+  renderSource: null,
+  captureSource: null,
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -245,19 +247,20 @@ async function handleCapture() {
     return;
   }
 
-  const hiResFrame = await captureHighResFrame().catch((error) => {
-    console.warn('ImageCapture failed, falling back to preview stream', error);
+  const photoSource = await createHighResSource().catch((error) => {
+    console.warn('High-res photo stream unavailable, falling back to preview', error);
     return null;
   });
 
-  const source = hiResFrame?.bitmap || video;
-  const exportWidth = hiResFrame?.width || targetWidth;
-  const exportHeight = hiResFrame?.height || targetHeight;
+  const sourceVideo = photoSource?.video || video;
+  const exportSize = photoSource
+    ? { width: photoSource.width, height: photoSource.height }
+    : { width: targetWidth, height: targetHeight };
 
-  canvas.width = exportWidth;
-  canvas.height = exportHeight;
-  drawSourceToContext(ctx, source, exportWidth, exportHeight);
-  await stampOverlay(ctx, exportWidth, exportHeight);
+  canvas.width = exportSize.width;
+  canvas.height = exportSize.height;
+  drawVideoToContext(ctx, sourceVideo, exportSize.width, exportSize.height);
+  await stampOverlay(ctx, exportSize.width, exportSize.height);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -274,8 +277,8 @@ async function handleCapture() {
     );
   });
 
-  if (hiResFrame?.bitmap && typeof hiResFrame.bitmap.close === 'function') {
-    hiResFrame.bitmap.close();
+  if (photoSource) {
+    releaseHighResSource(photoSource);
   }
 }
 
@@ -328,8 +331,17 @@ function drawWatermarkImage(context, width, height) {
   context.restore();
 }
 
-function startRecording() {
+async function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
+  try {
+    state.captureSource = await createHighResSource();
+    state.renderSource = state.captureSource.video;
+  } catch (error) {
+    console.warn('High-res recording stream unavailable, using preview feed', error);
+    state.captureSource = null;
+    state.renderSource = null;
+  }
+
   state.recordedChunks = [];
   state.mediaRecorder.start();
   setRecordingState(true);
@@ -339,6 +351,11 @@ function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
   setRecordingState(false);
+  if (state.captureSource) {
+    releaseHighResSource(state.captureSource);
+    state.captureSource = null;
+  }
+  state.renderSource = null;
 }
 
 function setRecordingState(isRecording) {
@@ -417,6 +434,11 @@ function shutdownStream() {
     state.mixedStream.getTracks().forEach((track) => track.stop());
     state.mixedStream = null;
   }
+  if (state.captureSource) {
+    releaseHighResSource(state.captureSource);
+    state.captureSource = null;
+  }
+  state.renderSource = null;
   state.mediaRecorder = null;
   state.recordedChunks = [];
 }
@@ -444,28 +466,7 @@ function getTargetDimensions() {
 }
 
 function drawVideoToContext(context, source, targetWidth, targetHeight) {
-  const sourceWidth = source?.videoWidth || source?.width || source?.naturalWidth;
-  const sourceHeight = source?.videoHeight || source?.height || source?.naturalHeight;
-  if (!sourceWidth || !sourceHeight || !targetWidth || !targetHeight) return;
-  const mapping = computeDrawMapping(sourceWidth, sourceHeight, targetWidth, targetHeight);
-  const mirror = state.facingMode === 'user';
-  context.save();
-  if (mirror) {
-    context.translate(targetWidth, 0);
-    context.scale(-1, 1);
-  }
-  context.drawImage(
-    source,
-    mapping.sx,
-    mapping.sy,
-    mapping.sw,
-    mapping.sh,
-    0,
-    0,
-    targetWidth,
-    targetHeight
-  );
-  context.restore();
+  drawSourceToContext(context, source, targetWidth, targetHeight);
 }
 
 function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) {
@@ -490,39 +491,75 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
   };
 }
 
-async function captureHighResFrame() {
-  const [track] = state.stream?.getVideoTracks() || [];
-  if (!track || typeof ImageCapture === 'undefined') return null;
-  let imageCapture;
-  try {
-    imageCapture = new ImageCapture(track);
-  } catch (error) {
-    console.warn('ImageCapture constructor failed', error);
-    return null;
-  }
+function createHighResConstraints() {
+  const facingMode = { ideal: state.facingMode };
+  return [
+    {
+      width: { ideal: 1920, max: 1920 },
+      height: { ideal: 1080, max: 1080 },
+      facingMode,
+    },
+    {
+      width: { ideal: 1280, max: 1280 },
+      height: { ideal: 720, max: 720 },
+      facingMode,
+    },
+    { facingMode },
+  ];
+}
 
-  try {
-    if (typeof imageCapture.takePhoto === 'function') {
-      const blob = await imageCapture.takePhoto();
-      const bitmap = await createImageBitmap(blob);
-      return {
-        bitmap,
-        width: bitmap.width,
-        height: bitmap.height,
-      };
-    }
-    if (typeof imageCapture.grabFrame === 'function') {
-      const bitmap = await imageCapture.grabFrame();
-      return {
-        bitmap,
-        width: bitmap.width,
-        height: bitmap.height,
-      };
-    }
-  } catch (error) {
-    console.warn('ImageCapture takePhoto/grabFrame failed', error);
+async function createHighResSource() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('getUserMedia not supported');
   }
-  return null;
+  const variants = createHighResConstraints();
+  let lastError = null;
+
+  for (const videoConstraints of variants) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+      const videoEl = document.createElement('video');
+      Object.assign(videoEl, { autoplay: true, muted: true, playsInline: true });
+      videoEl.srcObject = stream;
+      await ensureVideoElementReady(videoEl);
+      return {
+        stream,
+        video: videoEl,
+        width: videoEl.videoWidth,
+        height: videoEl.videoHeight,
+      };
+    } catch (error) {
+      lastError = error;
+      console.warn('High-res stream attempt failed', videoConstraints, error);
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error('Unable to create high-resolution stream');
+}
+
+function releaseHighResSource(source) {
+  const stream = source?.stream;
+  const videoEl = source?.video;
+  if (stream) {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+  if (videoEl) {
+    videoEl.srcObject = null;
+  }
+}
+
+async function ensureVideoElementReady(element) {
+  if (element.readyState >= 2 && element.videoWidth > 0) return;
+  await new Promise((resolve) => {
+    element.addEventListener('loadeddata', resolve, { once: true });
+  });
+  if (element.paused) {
+    try {
+      await element.play();
+    } catch (error) {
+      console.warn('Video element play failed', error);
+    }
+  }
 }
 
 function drawSourceToContext(context, source, targetWidth, targetHeight) {
