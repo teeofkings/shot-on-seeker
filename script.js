@@ -162,14 +162,14 @@ function startRenderer() {
       return;
     }
 
-    const width = video.videoWidth;
-    const height = video.videoHeight;
+    const { width, height } = getRenderDimensions();
     if (state.renderCanvas.width !== width || state.renderCanvas.height !== height) {
       state.renderCanvas.width = width;
       state.renderCanvas.height = height;
     }
 
-    state.renderCtx.drawImage(video, 0, 0, width, height);
+    state.renderCtx.clearRect(0, 0, width, height);
+    paintVideoFrame(state.renderCtx, width, height);
     drawOverlay(state.renderCtx, width, height);
     state.animationFrameId = requestAnimationFrame(draw);
   };
@@ -233,9 +233,11 @@ async function handleCapture() {
   if (cameraPage.classList.contains('hidden')) return;
   await ensureVideoReady();
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const { width, height } = getRenderDimensions();
+  canvas.width = width;
+  canvas.height = height;
+  ctx.clearRect(0, 0, width, height);
+  paintVideoFrame(ctx, width, height);
   await stampOverlay(ctx, canvas.width, canvas.height);
 
   await new Promise((resolve, reject) => {
@@ -322,6 +324,44 @@ function drawWatermarkImage(context, width, height, geometry) {
     drawHeight
   );
   context.restore();
+}
+
+function getRenderDimensions() {
+  const rect = viewbox?.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  if (rect?.width && rect?.height) {
+    return {
+      width: Math.round(rect.width * dpr),
+      height: Math.round(rect.height * dpr),
+    };
+  }
+  if (video.videoWidth && video.videoHeight) {
+    return { width: video.videoWidth, height: video.videoHeight };
+  }
+  return { width: 1280, height: 720 };
+}
+
+function paintVideoFrame(context, targetWidth, targetHeight) {
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  if (!sourceWidth || !sourceHeight) return;
+
+  const sourceRatio = sourceWidth / sourceHeight;
+  const targetRatio = targetWidth / targetHeight;
+
+  let drawWidth;
+  let drawHeight;
+  if (sourceRatio > targetRatio) {
+    drawHeight = targetHeight;
+    drawWidth = targetHeight * sourceRatio;
+  } else {
+    drawWidth = targetWidth;
+    drawHeight = targetWidth / sourceRatio;
+  }
+
+  const offsetX = (targetWidth - drawWidth) / 2;
+  const offsetY = (targetHeight - drawHeight) / 2;
+  context.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 }
 
 function startRecording() {
