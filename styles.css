@@ -91,7 +91,7 @@ body {
   position: relative;
   background: #000;
   /* allows it to scale while keeping the aspect ratio shape */
-  aspect-ratio: var(--camera-aspect, 3 / 4);
+  aspect-ratio: auto;
   max-height: none;
   flex: 1;
 }
