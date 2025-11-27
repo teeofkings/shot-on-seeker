@@ -25,6 +25,8 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
+  captureStream: null,
+  captureVideo: null,
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -245,16 +247,11 @@ async function handleCapture() {
     return;
   }
 
-  const { width: exportWidth, height: exportHeight } = getExportDimensions(targetWidth, targetHeight);
-  canvas.width = exportWidth;
-  canvas.height = exportHeight;
-
-  ctx.save();
-  ctx.scale(exportWidth / targetWidth, exportHeight / targetHeight);
-  drawVideoToContext(ctx, video, targetWidth, targetHeight);
-  ctx.restore();
-
-  await stampOverlay(ctx, exportWidth, exportHeight);
+  const source = await getHighResSource();
+  canvas.width = source.width;
+  canvas.height = source.height;
+  drawVideoSource(ctx, source.video, source.width, source.height);
+  await stampOverlay(ctx, source.width, source.height);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -270,6 +267,8 @@ async function handleCapture() {
       0.95
     );
   });
+
+  releaseHighResSource(source);
 }
 
 async function ensureVideoReady() {
@@ -321,8 +320,11 @@ function drawWatermarkImage(context, width, height) {
   context.restore();
 }
 
-function startRecording() {
+async function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
+  const source = await getHighResSource();
+  state.captureStream = source.stream;
+  state.captureVideo = source.video;
   state.recordedChunks = [];
   state.mediaRecorder.start();
   setRecordingState(true);
@@ -332,6 +334,7 @@ function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
   setRecordingState(false);
+  releaseHighResSource();
 }
 
 function setRecordingState(isRecording) {
@@ -410,6 +413,7 @@ function shutdownStream() {
     state.mixedStream.getTracks().forEach((track) => track.stop());
     state.mixedStream = null;
   }
+  releaseHighResSource();
   state.mediaRecorder = null;
   state.recordedChunks = [];
 }
@@ -481,16 +485,82 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
   };
 }
 
-function getExportDimensions(baseWidth, baseHeight) {
-  const scale = getExportScale();
-  return {
-    width: Math.max(baseWidth, Math.round(baseWidth * scale)),
-    height: Math.max(baseHeight, Math.round(baseHeight * scale)),
+function getHighResConstraints() {
+  const base = {
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    facingMode: { ideal: state.facingMode },
   };
+
+  return [
+    { ...base, width: { exact: 1920 }, height: { exact: 1080 } },
+    { ...base, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    { ...base, width: { ideal: 1280 }, height: { ideal: 720 } },
+    base,
+  ];
 }
 
-function getExportScale() {
-  const ratio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  const desired = Math.max(ratio, 1.5);
-  return Math.min(desired, 3);
+async function getHighResSource() {
+  if (state.captureStream && state.captureVideo) {
+    await ensureVideoElementReady(state.captureVideo);
+    return {
+      stream: state.captureStream,
+      video: state.captureVideo,
+      width: state.captureVideo.videoWidth,
+      height: state.captureVideo.videoHeight,
+    };
+  }
+
+  const constraintVariants = getHighResConstraints();
+  let lastError = null;
+  for (const video of constraintVariants) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+      const videoEl = document.createElement('video');
+      Object.assign(videoEl, { autoplay: true, muted: true, playsInline: true });
+      videoEl.srcObject = stream;
+      await ensureVideoElementReady(videoEl);
+      return {
+        stream,
+        video: videoEl,
+        width: videoEl.videoWidth,
+        height: videoEl.videoHeight,
+      };
+    } catch (error) {
+      lastError = error;
+      console.warn('High-res capture constraint failed', video, error);
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error('Unable to initialize high-resolution capture stream');
+}
+
+function releaseHighResSource(source) {
+  const stream = source?.stream || state.captureStream;
+  const videoEl = source?.video || state.captureVideo;
+
+  if (stream) {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+  if (videoEl) {
+    videoEl.srcObject = null;
+  }
+  if (!source) {
+    state.captureStream = null;
+    state.captureVideo = null;
+  }
+}
+
+async function ensureVideoElementReady(element) {
+  if (element.readyState >= 2 && element.videoWidth > 0) return;
+  await new Promise((resolve) => {
+    element.addEventListener('loadeddata', resolve, { once: true });
+  });
+  if (element.paused) {
+    try {
+      await element.play();
+    } catch (error) {
+      console.warn('High-res preview autoplay failed', error);
+    }
+  }
 }
