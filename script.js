@@ -141,33 +141,20 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
-  // Apply basic constraints
-  const constraints = {
+  const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: { ideal: state.facingMode } },
     audio: true,
-  };
+  });
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    state.stream = stream;
-    video.srcObject = stream;
-    await ensureVideoReady();
-
-    // Detect Solana Mobile and set a zoom compensation factor
-    const ua = (navigator.userAgent || '').toLowerCase();
-    state.zoomCompensation = ua.includes('solanamobile') ? 0.8 : 1; // 0.8 = slightly zoomed out
-
-    startRenderer();
-    setupMediaRecorder();
-  } catch (err) {
-    showError(`Camera error: ${err.message}`);
-    console.error(err);
-  }
+  state.stream = stream;
+  video.srcObject = stream;
+  await ensureVideoReady();
+  startRenderer();
+  setupMediaRecorder();
 }
 
 function startRenderer() {
   if (!state.renderCtx) return;
-
   const draw = () => {
     if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
@@ -181,18 +168,8 @@ function startRenderer() {
       state.renderCanvas.height = height;
     }
 
-    const scale = state.zoomCompensation || 1;
-    const scaledWidth = width / scale;
-    const scaledHeight = height / scale;
-    const offsetX = (width - scaledWidth) / 2;
-    const offsetY = (height - scaledHeight) / 2;
-
-    // Draw video with compensation for zoom
-    state.renderCtx.drawImage(video, offsetX, offsetY, scaledWidth, scaledHeight, 0, 0, width, height);
-
-    // Draw overlays as usual
+    state.renderCtx.drawImage(video, 0, 0, width, height);
     drawOverlay(state.renderCtx, width, height);
-
     state.animationFrameId = requestAnimationFrame(draw);
   };
 
