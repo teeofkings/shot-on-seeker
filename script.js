@@ -142,11 +142,24 @@ async function startCamera() {
   shutdownStream();
 
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: state.facingMode } },
+    video: {
+      facingMode: { ideal: state.facingMode },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      aspectRatio: { ideal: 1.777 }, /* 16:9 */
+    },
     audio: true,
   });
 
   state.stream = stream;
+  const [track] = stream.getVideoTracks();
+  if (track.getCapabilities) {
+    const caps = track.getCapabilities();
+    if (caps.zoom) {
+      track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] })
+        .catch(() => {});
+    }
+  }
   video.srcObject = stream;
   await ensureVideoReady();
   startRenderer();
