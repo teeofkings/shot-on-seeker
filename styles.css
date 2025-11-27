@@ -203,7 +203,7 @@ body {
 }
 
 .control.recording,
-.control.recording svg {
+.control.recording .icon-img {
   color: #e70421;
 }
 
@@ -215,7 +215,7 @@ body {
   width: 100%;
   text-align: center;
   margin: 0;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--danger);
 }
 
@@ -258,16 +258,5 @@ body {
   pointer-events: none;
 }
 
-@media (max-height: 780px) {
-  .app {
-    max-height: none;
-    min-height: auto;
-  }
-
-  .viewbox {
-    aspect-ratio: auto;
-    height: 65vh;
-  }
-}
 
 
