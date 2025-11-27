@@ -91,7 +91,7 @@ body {
   position: relative;
   background: #000;
   /* allows it to scale while keeping the aspect ratio shape */
-  aspect-ratio: auto;
+  aspect-ratio: var(--camera-aspect, auto);
   max-height: none;
   flex: 1;
 }
@@ -106,11 +106,15 @@ body {
 
   object-fit: cover;
   object-position: center;
-  transition: opacity 200ms ease;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  backface-visibility: hidden;
+  transform-origin: center;
+  will-change: opacity, transform;
 }
 
 .viewbox video.camera-loading {
   opacity: 0;
+  visibility: hidden;
 }
 
 .viewbox video.mirrored {
@@ -131,7 +135,7 @@ body {
   position: absolute;
   bottom: 24px;
   left: 24px;
-  width: clamp(100px, 27%, 104px);
+  width: clamp(90px, 27%, 94px);
   height: auto;
   pointer-events: none;
   z-index: 1;

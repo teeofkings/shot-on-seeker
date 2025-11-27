@@ -9,11 +9,12 @@ const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
 const viewbox = document.querySelector('.viewbox');
-const CAMERA_CONSTRAINTS = {
-  width: 1920,
-  height: 1080,
-  frameRate: 30,
-};
+const CAMERA_RESOLUTION_STEPS = [
+  { width: 1920, height: 1080 },
+  { width: 1600, height: 900 },
+  { width: 1280, height: 720 },
+];
+const TARGET_FRAMERATE = 30;
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
@@ -36,7 +37,11 @@ const state = {
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
 video.addEventListener('loadedmetadata', syncViewboxAspect);
 video.addEventListener('resize', syncViewboxAspect);
-video.addEventListener('playing', () => setVideoLoadingState(false));
+video.addEventListener('play', () => {
+  syncViewboxAspect();
+  setVideoLoadingState(false);
+});
+video.addEventListener('waiting', () => setVideoLoadingState(true));
 setVideoLoadingState(true);
 
 const watermarkImage = new Image();
@@ -154,16 +159,7 @@ async function startCamera() {
   shutdownStream();
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: state.facingMode },
-        width: { ideal: CAMERA_CONSTRAINTS.width },
-        height: { ideal: CAMERA_CONSTRAINTS.height },
-        frameRate: { ideal: CAMERA_CONSTRAINTS.frameRate, max: CAMERA_CONSTRAINTS.frameRate },
-      },
-      audio: true,
-    });
-
+    const stream = await openCameraStream();
     state.stream = stream;
     video.srcObject = stream;
     updateMirrorState();
@@ -371,6 +367,57 @@ async function switchCamera() {
   }
 }
 
+async function openCameraStream() {
+  const constraintsList = CAMERA_RESOLUTION_STEPS.map(({ width, height }) => ({
+    video: {
+      facingMode: { ideal: state.facingMode },
+      width: { ideal: width, max: width },
+      height: { ideal: height, max: height },
+      frameRate: { ideal: TARGET_FRAMERATE, max: TARGET_FRAMERATE },
+      advanced: [{ width, height, frameRate: TARGET_FRAMERATE }],
+    },
+    audio: true,
+  }));
+
+  constraintsList.push({
+    video: { facingMode: { ideal: state.facingMode } },
+    audio: true,
+  });
+
+  let lastError = null;
+  for (const constraints of constraintsList) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      applyStreamHints(stream);
+      return stream;
+    } catch (error) {
+      lastError = error;
+      console.warn('Camera constraints failed', constraints.video, error);
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error('Unable to start camera stream');
+}
+
+function applyStreamHints(stream) {
+  const [videoTrack] = stream.getVideoTracks();
+  if (!videoTrack) return;
+  try {
+    videoTrack.applyConstraints({
+      frameRate: { ideal: TARGET_FRAMERATE, max: TARGET_FRAMERATE },
+    }).catch(() => {});
+    if ('contentHint' in videoTrack) {
+      videoTrack.contentHint = 'motion';
+    }
+  } catch (error) {
+    console.warn('Unable to optimize camera track', error);
+  }
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -441,5 +488,7 @@ function updateMirrorState() {
 }
 
 function setVideoLoadingState(isLoading) {
-  video.classList.toggle('camera-loading', Boolean(isLoading));
+  const loading = Boolean(isLoading);
+  video.classList.toggle('camera-loading', loading);
+  video.classList.toggle('camera-ready', !loading);
 }
