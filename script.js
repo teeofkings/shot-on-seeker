@@ -12,6 +12,12 @@ const permissionError = document.getElementById('permission-error');
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
 
+const CAMERA_RESOLUTION_STEPS = [
+  { width: 1920, height: 1080 },
+  { width: 1600, height: 900 },
+  { width: 1280, height: 720 },
+];
+
 const state = {
   mediaRecorder: null,
   recordedChunks: [],
@@ -141,10 +147,7 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: state.facingMode } },
-    audio: true,
-  });
+  const stream = await openCameraStream();
 
   state.stream = stream;
   video.srcObject = stream;
@@ -339,6 +342,53 @@ async function switchCamera() {
   } finally {
     switchBtn.disabled = false;
   }
+}
+
+async function openCameraStream() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('getUserMedia not supported in this browser');
+  }
+
+  const facingMode = { ideal: state.facingMode };
+  const candidates = buildResolutionCandidates().map(({ width, height }) => ({
+    video: {
+      facingMode,
+      width: { ideal: width },
+      height: { ideal: height },
+      advanced: [
+        { width, height },
+        { width, height, frameRate: 30 },
+      ],
+    },
+    audio: true,
+  }));
+
+  candidates.push({
+    video: { facingMode },
+    audio: true,
+  });
+
+  let lastError = null;
+  for (const constraints of candidates) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+      console.warn('Camera constraint failed', constraints.video, error);
+    }
+  }
+
+  if (lastError) throw lastError;
+  throw new Error('Unable to start camera stream with the requested constraints.');
+}
+
+function buildResolutionCandidates() {
+  const variants = [];
+  CAMERA_RESOLUTION_STEPS.forEach(({ width, height }) => {
+    variants.push({ width, height });
+    variants.push({ width: height, height: width });
+  });
+  return variants;
 }
 
 function downloadBlob(blob, filename) {
