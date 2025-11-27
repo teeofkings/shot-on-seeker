@@ -9,12 +9,11 @@ const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
 const viewbox = document.querySelector('.viewbox');
-const CAMERA_RESOLUTION_HINTS = [
-  { width: 2560, height: 1440 },
-  { width: 1920, height: 1080 },
-  { width: 1600, height: 900 },
-  { width: 1280, height: 720 },
-];
+const CAMERA_CONSTRAINTS = {
+  width: 1920,
+  height: 1080,
+  frameRate: 30,
+};
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
@@ -35,6 +34,10 @@ const state = {
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
+video.addEventListener('loadedmetadata', syncViewboxAspect);
+video.addEventListener('resize', syncViewboxAspect);
+video.addEventListener('playing', () => setVideoLoadingState(false));
+setVideoLoadingState(true);
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -151,14 +154,23 @@ async function startCamera() {
   shutdownStream();
 
   try {
-    const stream = await openCameraStream();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: state.facingMode },
+        width: { ideal: CAMERA_CONSTRAINTS.width },
+        height: { ideal: CAMERA_CONSTRAINTS.height },
+        frameRate: { ideal: CAMERA_CONSTRAINTS.frameRate, max: CAMERA_CONSTRAINTS.frameRate },
+      },
+      audio: true,
+    });
+
     state.stream = stream;
     video.srcObject = stream;
     updateMirrorState();
     await ensureVideoReady();
     syncViewboxAspect();
-    setVideoLoadingState(false);
     setupMediaRecorder();
+    setVideoLoadingState(false);
   } catch (error) {
     setVideoLoadingState(false);
     throw error;
@@ -168,7 +180,6 @@ async function startCamera() {
 function startRenderer() {
   if (!state.renderCtx || state.isRendererActive) return;
   state.isRendererActive = true;
-
   const draw = () => {
     if (!state.isRendererActive) return;
     if (!video.videoWidth) {
@@ -184,7 +195,7 @@ function startRenderer() {
     }
 
     state.renderCtx.clearRect(0, 0, width, height);
-    drawVideoFrame(state.renderCtx, width, height);
+    state.renderCtx.drawImage(video, 0, 0, width, height);
     drawOverlay(state.renderCtx, width, height);
     state.animationFrameId = requestAnimationFrame(draw);
   };
@@ -193,6 +204,7 @@ function startRenderer() {
 }
 
 function stopRenderer() {
+  if (!state.isRendererActive) return;
   state.isRendererActive = false;
   if (state.animationFrameId) {
     cancelAnimationFrame(state.animationFrameId);
@@ -251,8 +263,7 @@ async function handleCapture() {
 
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawVideoFrame(ctx, canvas.width, canvas.height);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   await stampOverlay(ctx, canvas.width, canvas.height);
 
   await new Promise((resolve, reject) => {
@@ -288,18 +299,6 @@ async function stampOverlay(context, width, height) {
 function drawOverlay(context, width, height) {
   drawGradientOverlay(context, width, height);
   drawWatermarkImage(context, width, height);
-}
-
-function drawVideoFrame(context, width, height) {
-  if (!video.videoWidth || !video.videoHeight) return;
-  const mirror = state.facingMode === 'user';
-  context.save();
-  if (mirror) {
-    context.translate(width, 0);
-    context.scale(-1, 1);
-  }
-  context.drawImage(video, 0, 0, width, height);
-  context.restore();
 }
 
 function drawGradientOverlay(context, width, height) {
@@ -372,30 +371,6 @@ async function switchCamera() {
   }
 }
 
-async function openCameraStream() {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error('getUserMedia not supported in this browser');
-  }
-
-  const facingMode = { ideal: state.facingMode };
-  const advanced = CAMERA_RESOLUTION_HINTS.map(({ width, height }) => ({
-    width,
-    height,
-  }));
-
-  const constraints = {
-    video: {
-      facingMode,
-      width: { ideal: CAMERA_RESOLUTION_HINTS[0].width },
-      height: { ideal: CAMERA_RESOLUTION_HINTS[0].height },
-      advanced,
-    },
-    audio: true,
-  };
-
-  return navigator.mediaDevices.getUserMedia(constraints);
-}
-
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -457,22 +432,14 @@ function syncViewboxAspect() {
   const width = video.videoWidth;
   const height = video.videoHeight;
   if (!width || !height) return;
-  const ratio = `${width} / ${height}`;
-  viewbox.style.setProperty('--camera-aspect', ratio);
-  viewbox.style.aspectRatio = ratio;
+  viewbox.style.setProperty('--camera-aspect', `${width} / ${height}`);
 }
 
 function updateMirrorState() {
-  const mirror = state.facingMode === 'user';
-  video.classList.toggle('mirrored', mirror);
+  const shouldMirror = state.facingMode === 'user';
+  video.classList.toggle('mirrored', shouldMirror);
 }
 
 function setVideoLoadingState(isLoading) {
-  if (isLoading) {
-    video.classList.add('camera-loading');
-    video.classList.remove('camera-ready');
-  } else {
-    video.classList.remove('camera-loading');
-    video.classList.add('camera-ready');
-  }
+  video.classList.toggle('camera-loading', Boolean(isLoading));
 }
