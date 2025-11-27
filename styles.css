@@ -108,6 +108,10 @@ body {
   object-position: center;
 }
 
+.viewbox video.mirrored {
+  transform: scaleX(-1);
+}
+
 .viewbox::after {
   content: "";
   position: absolute;

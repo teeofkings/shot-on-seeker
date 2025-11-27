@@ -149,6 +149,7 @@ async function startCamera() {
   state.stream = stream;
   video.srcObject = stream;
   await ensureVideoReady();
+  updateMirrorState();
   startRenderer();
   setupMediaRecorder();
 }
@@ -393,4 +394,9 @@ function shutdownStream() {
   }
   state.mediaRecorder = null;
   state.recordedChunks = [];
+}
+
+function updateMirrorState() {
+  const shouldMirror = state.facingMode === 'user';
+  video.classList.toggle('mirrored', shouldMirror);
 }
