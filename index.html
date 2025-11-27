@@ -33,6 +33,28 @@
       <p id="permission-error" class="error hidden" role="alert"></p>
     </section>
 
+    <section id="export-page" class="device hidden" aria-live="polite">
+      <div class="viewbox">
+        <div class="export-preview" data-export-preview></div>
+      </div>
+
+      <div class="control-row export-actions" role="group" aria-label="Export actions">
+        <button id="export-share" type="button" class="control pill">
+          <img src="icons/social_x_line.svg" alt="" aria-hidden="true" class="icon-img">
+          <span class="label">Share on X</span>
+        </button>
+
+        <button id="export-save" type="button" class="control pill">
+          <img src="icons/download_2_line.svg" alt="" aria-hidden="true" class="icon-img">
+          <span class="label">Save</span>
+        </button>
+
+        <button id="export-retake" type="button" class="control circle">
+          <img src="icons/close_line.svg" alt="" aria-hidden="true" class="icon-img">
+        </button>
+      </div>
+    </section>
+
     <section id="seeker-gate" class="gate hidden" aria-live="assertive">
       <p class="gate-eyebrow">Seeker only</p>
       <h1>This build stays on-device</h1>

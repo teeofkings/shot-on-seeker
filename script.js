@@ -9,9 +9,16 @@ const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
 const viewbox = document.querySelector('.viewbox');
+const exportPage = document.getElementById('export-page');
+const exportPreview = document.querySelector('[data-export-preview]');
+const exportShareBtn = document.getElementById('export-share');
+const exportSaveBtn = document.getElementById('export-save');
+const exportRetakeBtn = document.getElementById('export-retake');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
+const SHARE_TARGET_WIDTH = 480;
+const SHARE_TARGET_HEIGHT = 640;
 
 const state = {
   mediaRecorder: null,
@@ -25,6 +32,15 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
+};
+
+const exportState = {
+  type: '',
+  originalBlob: null,
+  shareBlob: null,
+  originalName: '',
+  shareName: '',
+  previewUrl: '',
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -52,6 +68,7 @@ if ('decode' in watermarkImage) {
 }
 
 init();
+setupExportControls();
 
 function bindUIEvents() {
   captureBtn.addEventListener('click', handleCapture);
@@ -60,6 +77,17 @@ function bindUIEvents() {
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
+}
+
+function setupExportControls() {
+  exportShareBtn?.addEventListener('click', () => handleExportAction('share'));
+  exportSaveBtn?.addEventListener('click', () => handleExportAction('original'));
+  exportRetakeBtn?.addEventListener('click', hideExportScreen);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !exportPage.classList.contains('hidden')) {
+      hideExportScreen();
+    }
+  });
 }
 
 async function init() {
@@ -129,6 +157,26 @@ async function collectUserAgentHints() {
       }
     }
   }
+
+async function shareToX(blob, filename) {
+  const file = new File([blob], filename, { type: blob.type || 'image/png' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'Shot on Seeker',
+        text: '#ShotOnSeeker',
+      });
+      return;
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      console.warn('Native share failed, falling back to download', error);
+    }
+  }
+
+  downloadBlob(blob, filename);
+  window.open('https://x.com/intent/tweet?text=Shot%20on%20Seeker%20%23ShotOnSeeker', '_blank', 'noopener');
+}
 
   return hints.join(' ');
 }
@@ -219,13 +267,30 @@ function setupMediaRecorder() {
     }
   };
 
-  state.mediaRecorder.onstop = () => {
+  state.mediaRecorder.onstop = async () => {
     if (!state.recordedChunks.length) return;
     const blob = new Blob(state.recordedChunks, {
       type: state.mediaRecorder.mimeType || 'video/webm',
     });
     state.recordedChunks = [];
-    downloadBlob(blob, `seeker-video-${timestamp()}.${blob.type.includes('mp4') ? 'mp4' : 'webm'}`);
+    const previewUrl = URL.createObjectURL(blob);
+    let shareBlob = null;
+    try {
+      shareBlob = await createShareVideoBlob(blob);
+    } catch (error) {
+      console.warn('Unable to create share-sized video', error);
+    }
+    const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    const baseName = `seeker-video-${timestamp()}.${extension}`;
+    showExportScreen({
+      type: 'video',
+      previewUrl,
+      originalBlob: blob,
+      shareBlob,
+      originalName: baseName,
+      shareName: baseName.replace(`.${extension}`, `-x.${extension}`),
+      mimeType: blob.type,
+    });
   };
 }
 
@@ -245,26 +310,30 @@ async function handleCapture() {
     return;
   }
 
+  const baseCanvas = document.createElement('canvas');
+  baseCanvas.width = targetWidth;
+  baseCanvas.height = targetHeight;
+  const baseCtx = baseCanvas.getContext('2d');
+  drawVideoToContext(baseCtx, video, targetWidth, targetHeight);
+
   canvas.width = targetWidth;
   canvas.height = targetHeight;
-  drawVideoToContext(ctx, video, targetWidth, targetHeight);
-  await stampOverlay(ctx, canvas.width, canvas.height);
+  canvas.getContext('2d').drawImage(baseCanvas, 0, 0);
+  await stampOverlay(canvas.getContext('2d'), targetWidth, targetHeight);
 
-  await new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error('Unable to export capture.'));
-          return;
-        }
-        downloadBlob(blob, `seeker-photo-${timestamp()}.png`);
-        resolve();
-      },
-      'image/png',
-      0.95
-    );
+  const originalBlob = await canvasToBlob(canvas);
+  const shareBlob = await createSharePhotoBlob(baseCanvas);
+  const previewUrl = URL.createObjectURL(originalBlob);
+  const baseName = `seeker-photo-${timestamp()}.png`;
+
+  showExportScreen({
+    type: 'photo',
+    previewUrl,
+    originalBlob,
+    shareBlob,
+    originalName: baseName,
+    shareName: baseName.replace('.png', '-x.png'),
   });
-
 }
 
 async function ensureVideoReady() {
@@ -367,6 +436,220 @@ function downloadBlob(blob, filename) {
   });
 }
 
+function showExportScreen(config) {
+  exportState.type = config.type;
+  exportState.originalBlob = config.originalBlob;
+  exportState.shareBlob = config.shareBlob || null;
+  exportState.originalName = config.originalName;
+  exportState.shareName = config.shareName || '';
+  exportState.previewUrl = config.previewUrl;
+  exportState.mimeType = config.mimeType || '';
+
+  if (config.type === 'photo') {
+    exportPreview.innerHTML = `<img src="${config.previewUrl}" alt="Captured preview">`;
+  } else {
+    exportPreview.innerHTML = `
+      <div class="video-preview">
+        <video data-preview-video playsinline preload="metadata" src="${config.previewUrl}"></video>
+        <button type="button" class="video-preview__play" data-preview-play aria-label="Play video">
+          <img src="icons/play_circle_fill.svg" alt="" aria-hidden="true">
+        </button>
+      </div>
+    `;
+    wireVideoPreviewControls();
+  }
+
+  exportShareBtn.disabled = !exportState.shareBlob;
+  cameraPage.classList.add('hidden');
+  exportPage.classList.remove('hidden');
+}
+
+function hideExportScreen() {
+  const videoEl = exportPreview.querySelector('video');
+  if (videoEl) {
+    videoEl.pause();
+    URL.revokeObjectURL(videoEl.src);
+  }
+  if (exportState.previewUrl) {
+    URL.revokeObjectURL(exportState.previewUrl);
+  }
+  exportPreview.innerHTML = '';
+  exportPage.classList.add('hidden');
+  cameraPage.classList.remove('hidden');
+  exportState.type = '';
+  exportState.originalBlob = null;
+  exportState.shareBlob = null;
+  exportState.originalName = '';
+  exportState.shareName = '';
+  exportState.previewUrl = '';
+  exportState.mimeType = '';
+}
+
+async function handleExportAction(kind) {
+  const blob = kind === 'share' ? exportState.shareBlob : exportState.originalBlob;
+  const filename = kind === 'share' ? exportState.shareName : exportState.originalName;
+  if (!blob || !filename) return;
+  if (kind === 'share') {
+    await shareToX(blob, filename);
+  } else {
+    downloadBlob(blob, filename);
+  }
+  hideExportScreen();
+}
+
+function wireVideoPreviewControls() {
+  const videoEl = exportPreview.querySelector('video');
+  const playButton = exportPreview.querySelector('[data-preview-play]');
+  if (!videoEl || !playButton) return;
+
+  const updatePlayButton = () => {
+    if (videoEl.paused || videoEl.ended) {
+      playButton.classList.remove('hidden');
+    } else {
+      playButton.classList.add('hidden');
+    }
+  };
+
+  playButton.addEventListener('click', () => {
+    videoEl.play().catch(() => {});
+  });
+  videoEl.addEventListener('play', updatePlayButton);
+  videoEl.addEventListener('pause', updatePlayButton);
+  videoEl.addEventListener('ended', updatePlayButton);
+  updatePlayButton();
+}
+
+function canvasToBlob(canvas, type = 'image/png', quality = 0.95) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('Unable to export canvas.'));
+          return;
+        }
+        resolve(blob);
+      },
+      type,
+      quality
+    );
+  });
+}
+
+async function createSharePhotoBlob(sourceCanvas) {
+  if (!sourceCanvas?.width || !sourceCanvas?.height) return null;
+  const shareCanvas = document.createElement('canvas');
+  shareCanvas.width = SHARE_TARGET_WIDTH;
+  shareCanvas.height = SHARE_TARGET_HEIGHT;
+  const shareCtx = shareCanvas.getContext('2d');
+  shareCtx.fillStyle = '#000';
+  shareCtx.fillRect(0, 0, shareCanvas.width, shareCanvas.height);
+  const mapping = computeDrawMapping(
+    sourceCanvas.width,
+    sourceCanvas.height,
+    shareCanvas.width,
+    shareCanvas.height
+  );
+  shareCtx.drawImage(
+    sourceCanvas,
+    mapping.sx,
+    mapping.sy,
+    mapping.sw,
+    mapping.sh,
+    0,
+    0,
+    shareCanvas.width,
+    shareCanvas.height
+  );
+  await stampOverlay(shareCtx, shareCanvas.width, shareCanvas.height);
+  return canvasToBlob(shareCanvas);
+}
+
+async function createShareVideoBlob(originalBlob) {
+  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
+  const videoEl = document.createElement('video');
+  videoEl.muted = true;
+  videoEl.playsInline = true;
+  videoEl.src = URL.createObjectURL(originalBlob);
+  await ensureVideoElementPrepped(videoEl);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = SHARE_TARGET_WIDTH;
+  canvas.height = SHARE_TARGET_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const mapping = computeDrawMapping(videoEl.videoWidth, videoEl.videoHeight, canvas.width, canvas.height);
+  const stream = canvas.captureStream(30);
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, originalBlob.type ? { mimeType: originalBlob.type } : undefined);
+  } catch (error) {
+    console.warn('Unable to instantiate MediaRecorder for share video', error);
+    URL.revokeObjectURL(videoEl.src);
+    return null;
+  }
+
+  const chunks = [];
+  recorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) {
+      chunks.push(event.data);
+    }
+  };
+
+  const recordingPromise = new Promise((resolve) => {
+    recorder.onstop = () => {
+      resolve(new Blob(chunks, { type: originalBlob.type || 'video/webm' }));
+    };
+  });
+
+  recorder.start();
+
+  const drawFrame = () => {
+    if (videoEl.paused || videoEl.ended) return;
+    ctx.drawImage(
+      videoEl,
+      mapping.sx,
+      mapping.sy,
+      mapping.sw,
+      mapping.sh,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+    requestAnimationFrame(drawFrame);
+  };
+  await videoEl.play().catch(() => {});
+  drawFrame();
+  await waitForVideoEnd(videoEl);
+  recorder.stop();
+  const shareBlob = await recordingPromise;
+  URL.revokeObjectURL(videoEl.src);
+  videoEl.remove();
+  return shareBlob;
+}
+
+function waitForVideoEnd(videoEl) {
+  return new Promise((resolve) => {
+    if (videoEl.ended) {
+      resolve();
+      return;
+    }
+    const handler = () => {
+      videoEl.removeEventListener('ended', handler);
+      resolve();
+    };
+    videoEl.addEventListener('ended', handler);
+  });
+}
+
+async function ensureVideoElementPrepped(element) {
+  if (element.readyState >= 2 && element.videoWidth > 0) return;
+  await new Promise((resolve) => {
+    element.addEventListener('loadeddata', resolve, { once: true });
+  });
+}
+
 function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
@@ -432,9 +715,11 @@ function getTargetDimensions() {
 }
 
 function drawVideoToContext(context, source, targetWidth, targetHeight) {
-  if (!source?.videoWidth || !source?.videoHeight || !targetWidth || !targetHeight) return;
-  const mapping = computeDrawMapping(source.videoWidth, source.videoHeight, targetWidth, targetHeight);
-  const mirror = state.facingMode === 'user';
+  const sourceWidth = source?.videoWidth || source?.width || source?.naturalWidth;
+  const sourceHeight = source?.videoHeight || source?.height || source?.naturalHeight;
+  if (!sourceWidth || !sourceHeight || !targetWidth || !targetHeight) return;
+  const mapping = computeDrawMapping(sourceWidth, sourceHeight, targetWidth, targetHeight);
+  const mirror = source === video && state.facingMode === 'user';
   context.save();
   if (mirror) {
     context.translate(targetWidth, 0);

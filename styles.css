@@ -116,6 +116,11 @@ body {
   background: linear-gradient(180deg, rgba(20, 63, 62, 0) 0%, #143F3E 116.53%);
 }
 
+#export-page .viewbox::after,
+#export-page #live-watermark {
+  display: none;
+}
+
 #live-watermark {
   position: absolute;
   bottom: 24px;
@@ -255,6 +260,72 @@ body {
   height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+.export-preview {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.export-preview img,
+.export-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.export-preview .video-preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.export-preview .video-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.video-preview__play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.video-preview__play img {
+  width: 56px;
+  height: 56px;
+}
+
+.video-preview__play.hidden {
+  display: none;
+}
+
+.export-actions {
+  width: auto;
+  align-self: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.export-actions .control {
+  flex: 0;
+  min-width: auto;
+  padding-inline: 18px;
+}
+
+.export-actions .label {
+  white-space: nowrap;
 }
 
 
