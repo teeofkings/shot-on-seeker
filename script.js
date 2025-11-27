@@ -8,13 +8,9 @@ const recordLabel = document.querySelector('[data-record-label]');
 const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
+const viewbox = document.querySelector('.viewbox');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
-const CAMERA_RESOLUTION_STEPS = [
-  { width: 1920, height: 1080 },
-  { width: 1600, height: 900 },
-  { width: 1280, height: 720 },
-];
 const FORCE_QUERY_PARAM = 'forceSeeker';
 
 const state = {
@@ -29,8 +25,6 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
-  renderSourceVideo: null,
-  exportStream: null,
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -61,17 +55,8 @@ init();
 
 function bindUIEvents() {
   captureBtn.addEventListener('click', handleCapture);
-  recordBtn.addEventListener('click', async () => {
-    if (state.isRecording) {
-      stopRecording();
-    } else {
-      try {
-        await startRecording();
-      } catch (error) {
-        showError(`Recording failed: ${error.message}`);
-        console.error(error);
-      }
-    }
+  recordBtn.addEventListener('click', () => {
+    state.isRecording ? stopRecording() : startRecording();
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
@@ -173,21 +158,25 @@ async function startCamera() {
 function startRenderer() {
   if (!state.renderCtx || state.animationFrameId) return;
   const draw = () => {
-    const source = state.renderSourceVideo || video;
-    if (!source.videoWidth) {
+    if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
     }
 
-    const width = source.videoWidth;
-    const height = source.videoHeight;
-    if (state.renderCanvas.width !== width || state.renderCanvas.height !== height) {
-      state.renderCanvas.width = width;
-      state.renderCanvas.height = height;
+    const { width: targetWidth, height: targetHeight } = getTargetDimensions();
+    if (!targetWidth || !targetHeight) {
+      state.animationFrameId = requestAnimationFrame(draw);
+      return;
     }
 
-    state.renderCtx.drawImage(source, 0, 0, width, height);
-    drawOverlay(state.renderCtx, width, height);
+    if (state.renderCanvas.width !== targetWidth || state.renderCanvas.height !== targetHeight) {
+      state.renderCanvas.width = targetWidth;
+      state.renderCanvas.height = targetHeight;
+    }
+
+    state.renderCtx.clearRect(0, 0, targetWidth, targetHeight);
+    drawVideoToContext(state.renderCtx, video, targetWidth, targetHeight);
+    drawOverlay(state.renderCtx, targetWidth, targetHeight);
     state.animationFrameId = requestAnimationFrame(draw);
   };
 
@@ -250,13 +239,15 @@ async function handleCapture() {
   if (cameraPage.classList.contains('hidden')) return;
   await ensureVideoReady();
 
-  const exportSource = await createExportSource().catch(() => null);
-  const source = exportSource?.video || video;
-  await ensureVideoElementReady(source);
+  const { width: targetWidth, height: targetHeight } = getTargetDimensions();
+  if (!targetWidth || !targetHeight) {
+    showError('Capture unavailable: invalid viewbox size.');
+    return;
+  }
 
-  canvas.width = source.videoWidth;
-  canvas.height = source.videoHeight;
-  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  drawVideoToContext(ctx, video, targetWidth, targetHeight);
   await stampOverlay(ctx, canvas.width, canvas.height);
 
   await new Promise((resolve, reject) => {
@@ -273,10 +264,6 @@ async function handleCapture() {
       0.95
     );
   });
-
-  if (exportSource) {
-    releaseExportSource(exportSource);
-  }
 }
 
 async function ensureVideoReady() {
@@ -328,17 +315,9 @@ function drawWatermarkImage(context, width, height) {
   context.restore();
 }
 
-async function startRecording() {
+function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
-  const exportSource = await createExportSource().catch(() => null);
-  if (exportSource) {
-    state.exportStream = exportSource.stream;
-    state.renderSourceVideo = exportSource.video;
-  } else {
-    state.renderSourceVideo = null;
-  }
   state.recordedChunks = [];
-  startRenderer();
   state.mediaRecorder.start();
   setRecordingState(true);
 }
@@ -347,7 +326,6 @@ function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
   setRecordingState(false);
-  cleanupRecordingSource();
 }
 
 function setRecordingState(isRecording) {
@@ -406,7 +384,6 @@ function clearError() {
 
 function shutdownStream() {
   stopRenderer();
-  cleanupRecordingSource();
   if (state.isRecording) {
     try {
       state.mediaRecorder?.stop();
@@ -431,89 +408,69 @@ function shutdownStream() {
   state.recordedChunks = [];
 }
 
-function cleanupRecordingSource() {
-  if (state.exportStream) {
-    state.exportStream.getTracks().forEach((track) => track.stop());
-    state.exportStream = null;
-  }
-  state.renderSourceVideo = null;
-}
-
-async function createExportSource() {
-  const deviceId = getActiveDeviceId();
-  const candidates = CAMERA_RESOLUTION_STEPS.map(({ width, height }) =>
-    buildHighResolutionConstraint(width, height, deviceId)
-  );
-
-  const fallbackWidth = video.videoWidth || 1280;
-  const fallbackHeight = video.videoHeight || 720;
-  candidates.push(buildHighResolutionConstraint(fallbackWidth, fallbackHeight, deviceId));
-
-  let lastError = null;
-  for (const constraints of candidates) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const videoEl = document.createElement('video');
-      Object.assign(videoEl, { autoplay: true, muted: true, playsInline: true });
-      videoEl.srcObject = stream;
-      await ensureVideoElementReady(videoEl);
-      return { stream, video: videoEl };
-    } catch (error) {
-      lastError = error;
-      console.warn('Export stream constraint failed', constraints.video, error);
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  throw new Error('Unable to obtain a high-resolution export stream.');
-}
-
-function releaseExportSource(source) {
-  source?.stream?.getTracks().forEach((track) => track.stop());
-  if (source?.video) {
-    source.video.srcObject = null;
-  }
-}
-
-function buildHighResolutionConstraint(width, height, deviceId) {
-  const videoConstraints = {
-    width: { ideal: width, max: width },
-    height: { ideal: height, max: height },
-    facingMode: { ideal: state.facingMode },
-  };
-  if (deviceId) {
-    videoConstraints.deviceId = { exact: deviceId };
-  }
-  return {
-    video: videoConstraints,
-    audio: false,
-  };
-}
-
-async function ensureVideoElementReady(element) {
-  if (element.readyState >= 2 && element.videoWidth > 0) return;
-  await new Promise((resolve) => {
-    element.addEventListener('loadeddata', resolve, { once: true });
-  });
-  if (element.paused) {
-    try {
-      await element.play();
-    } catch (error) {
-      console.warn('Unable to autoplay export preview', error);
-    }
-  }
-}
-
 function updateMirrorState() {
   const shouldMirror = state.facingMode === 'user';
   video.classList.toggle('mirrored', shouldMirror);
 }
 
-function getActiveDeviceId() {
-  const [track] = state.stream?.getVideoTracks() || [];
-  if (!track || typeof track.getSettings !== 'function') return '';
-  return track.getSettings().deviceId || '';
+function getViewboxSize() {
+  if (!viewbox) return { width: 0, height: 0 };
+  const rect = viewbox.getBoundingClientRect();
+  const width = Math.round(rect.width || 0);
+  const height = Math.round(rect.height || 0);
+  return { width, height };
+}
+
+function getTargetDimensions() {
+  const { width, height } = getViewboxSize();
+  if (width > 0 && height > 0) return { width, height };
+  if (video.videoWidth && video.videoHeight) {
+    return { width: video.videoWidth, height: video.videoHeight };
+  }
+  return { width: 0, height: 0 };
+}
+
+function drawVideoToContext(context, source, targetWidth, targetHeight) {
+  if (!source?.videoWidth || !source?.videoHeight || !targetWidth || !targetHeight) return;
+  const mapping = computeDrawMapping(source.videoWidth, source.videoHeight, targetWidth, targetHeight);
+  const mirror = state.facingMode === 'user';
+  context.save();
+  if (mirror) {
+    context.translate(targetWidth, 0);
+    context.scale(-1, 1);
+  }
+  context.drawImage(
+    source,
+    mapping.sx,
+    mapping.sy,
+    mapping.sw,
+    mapping.sh,
+    0,
+    0,
+    targetWidth,
+    targetHeight
+  );
+  context.restore();
+}
+
+function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) {
+  if (!videoWidth || !videoHeight || !targetWidth || !targetHeight) {
+    return { sx: 0, sy: 0, sw: videoWidth, sh: videoHeight };
+  }
+
+  const widthRatio = targetWidth / videoWidth;
+  const heightRatio = targetHeight / videoHeight;
+  const scale = Math.max(widthRatio, heightRatio);
+
+  const sourceWidth = targetWidth / scale;
+  const sourceHeight = targetHeight / scale;
+  const sx = (videoWidth - sourceWidth) / 2;
+  const sy = (videoHeight - sourceHeight) / 2;
+
+  return {
+    sx,
+    sy,
+    sw: sourceWidth,
+    sh: sourceHeight,
+  };
 }
