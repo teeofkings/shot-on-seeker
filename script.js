@@ -25,8 +25,6 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
-  captureStream: null,
-  captureVideo: null,
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -160,19 +158,12 @@ async function startCamera() {
 function startRenderer() {
   if (!state.renderCtx || state.animationFrameId) return;
   const draw = () => {
-    const sourceVideo = selectRenderSource();
-    if (!sourceVideo?.videoWidth) {
+    if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
     }
 
-    const baseSize = getTargetDimensions();
-    const targetSize =
-      sourceVideo === video
-        ? baseSize
-        : determineExportSize(sourceVideo, baseSize.width, baseSize.height);
-    const targetWidth = targetSize.width;
-    const targetHeight = targetSize.height;
+    const { width: targetWidth, height: targetHeight } = getTargetDimensions();
     if (!targetWidth || !targetHeight) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
@@ -184,7 +175,7 @@ function startRenderer() {
     }
 
     state.renderCtx.clearRect(0, 0, targetWidth, targetHeight);
-    drawVideoToContext(state.renderCtx, sourceVideo, targetWidth, targetHeight);
+    drawVideoToContext(state.renderCtx, video, targetWidth, targetHeight);
     drawOverlay(state.renderCtx, targetWidth, targetHeight);
     state.animationFrameId = requestAnimationFrame(draw);
   };
@@ -254,17 +245,19 @@ async function handleCapture() {
     return;
   }
 
-  const hiResSource = await getHighResSource().catch((error) => {
-    console.warn('Falling back to preview stream for capture', error);
+  const hiResFrame = await captureHighResFrame().catch((error) => {
+    console.warn('ImageCapture failed, falling back to preview stream', error);
     return null;
   });
-  const sourceVideo = hiResSource?.video || video;
-  const exportSize = determineExportSize(sourceVideo, targetWidth, targetHeight);
 
-  canvas.width = exportSize.width;
-  canvas.height = exportSize.height;
-  drawVideoToContext(ctx, sourceVideo, exportSize.width, exportSize.height);
-  await stampOverlay(ctx, exportSize.width, exportSize.height);
+  const source = hiResFrame?.bitmap || video;
+  const exportWidth = hiResFrame?.width || targetWidth;
+  const exportHeight = hiResFrame?.height || targetHeight;
+
+  canvas.width = exportWidth;
+  canvas.height = exportHeight;
+  drawSourceToContext(ctx, source, exportWidth, exportHeight);
+  await stampOverlay(ctx, exportWidth, exportHeight);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -281,8 +274,8 @@ async function handleCapture() {
     );
   });
 
-  if (hiResSource?.stream) {
-    releaseHighResSource(hiResSource);
+  if (hiResFrame?.bitmap && typeof hiResFrame.bitmap.close === 'function') {
+    hiResFrame.bitmap.close();
   }
 }
 
@@ -335,21 +328,8 @@ function drawWatermarkImage(context, width, height) {
   context.restore();
 }
 
-async function startRecording() {
+function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
-  let source = null;
-  try {
-    source = await getHighResSource();
-  } catch (error) {
-    console.warn('Falling back to preview stream for recording', error);
-  }
-
-  if (source?.stream && source?.video) {
-    state.captureStream = source.stream;
-    state.captureVideo = source.video;
-  } else {
-    releaseHighResSource();
-  }
   state.recordedChunks = [];
   state.mediaRecorder.start();
   setRecordingState(true);
@@ -359,7 +339,6 @@ function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
   setRecordingState(false);
-  releaseHighResSource();
 }
 
 function setRecordingState(isRecording) {
@@ -438,7 +417,6 @@ function shutdownStream() {
     state.mixedStream.getTracks().forEach((track) => track.stop());
     state.mixedStream = null;
   }
-  releaseHighResSource();
   state.mediaRecorder = null;
   state.recordedChunks = [];
 }
@@ -466,8 +444,10 @@ function getTargetDimensions() {
 }
 
 function drawVideoToContext(context, source, targetWidth, targetHeight) {
-  if (!source?.videoWidth || !source?.videoHeight || !targetWidth || !targetHeight) return;
-  const mapping = computeDrawMapping(source.videoWidth, source.videoHeight, targetWidth, targetHeight);
+  const sourceWidth = source?.videoWidth || source?.width || source?.naturalWidth;
+  const sourceHeight = source?.videoHeight || source?.height || source?.naturalHeight;
+  if (!sourceWidth || !sourceHeight || !targetWidth || !targetHeight) return;
+  const mapping = computeDrawMapping(sourceWidth, sourceHeight, targetWidth, targetHeight);
   const mirror = state.facingMode === 'user';
   context.save();
   if (mirror) {
@@ -510,102 +490,62 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
   };
 }
 
-function selectRenderSource() {
-  if (state.captureVideo && state.captureVideo.readyState >= 2) {
-    return state.captureVideo;
-  }
-  return video;
-}
-
-function determineExportSize(sourceVideo, baseWidth, baseHeight) {
-  if (!sourceVideo?.videoWidth || !sourceVideo?.videoHeight) {
-    return { width: baseWidth, height: baseHeight };
-  }
-  const maxWidthScale = sourceVideo.videoWidth / baseWidth;
-  const maxHeightScale = sourceVideo.videoHeight / baseHeight;
-  const scale = Math.max(1, Math.min(maxWidthScale, maxHeightScale, 3));
-  return {
-    width: Math.round(baseWidth * scale),
-    height: Math.round(baseHeight * scale),
-  };
-}
-
-function getHighResConstraints() {
-  const base = {
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    facingMode: { ideal: state.facingMode },
-  };
-
-  return [
-    { ...base, width: { exact: 1920 }, height: { exact: 1080 } },
-    { ...base, width: { ideal: 1920 }, height: { ideal: 1080 } },
-    { ...base, width: { ideal: 1280 }, height: { ideal: 720 } },
-    base,
-  ];
-}
-
-async function getHighResSource() {
-  if (state.captureStream && state.captureVideo) {
-    await ensureVideoElementReady(state.captureVideo);
-    return {
-      stream: state.captureStream,
-      video: state.captureVideo,
-      width: state.captureVideo.videoWidth,
-      height: state.captureVideo.videoHeight,
-    };
+async function captureHighResFrame() {
+  const [track] = state.stream?.getVideoTracks() || [];
+  if (!track || typeof ImageCapture === 'undefined') return null;
+  let imageCapture;
+  try {
+    imageCapture = new ImageCapture(track);
+  } catch (error) {
+    console.warn('ImageCapture constructor failed', error);
+    return null;
   }
 
-  const constraintVariants = getHighResConstraints();
-  let lastError = null;
-  for (const video of constraintVariants) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
-      const videoEl = document.createElement('video');
-      Object.assign(videoEl, { autoplay: true, muted: true, playsInline: true });
-      videoEl.srcObject = stream;
-      await ensureVideoElementReady(videoEl);
+  try {
+    if (typeof imageCapture.takePhoto === 'function') {
+      const blob = await imageCapture.takePhoto();
+      const bitmap = await createImageBitmap(blob);
       return {
-        stream,
-        video: videoEl,
-        width: videoEl.videoWidth,
-        height: videoEl.videoHeight,
+        bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
       };
-    } catch (error) {
-      lastError = error;
-      console.warn('High-res capture constraint failed', video, error);
     }
+    if (typeof imageCapture.grabFrame === 'function') {
+      const bitmap = await imageCapture.grabFrame();
+      return {
+        bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+      };
+    }
+  } catch (error) {
+    console.warn('ImageCapture takePhoto/grabFrame failed', error);
   }
-  if (lastError) throw lastError;
-  throw new Error('Unable to initialize high-resolution capture stream');
+  return null;
 }
 
-function releaseHighResSource(source) {
-  const stream = source?.stream || state.captureStream;
-  const videoEl = source?.video || state.captureVideo;
-
-  if (stream) {
-    stream.getTracks().forEach((track) => track.stop());
+function drawSourceToContext(context, source, targetWidth, targetHeight) {
+  const sourceWidth = source?.videoWidth || source?.width || source?.naturalWidth;
+  const sourceHeight = source?.videoHeight || source?.height || source?.naturalHeight;
+  if (!sourceWidth || !sourceHeight) return;
+  const mapping = computeDrawMapping(sourceWidth, sourceHeight, targetWidth, targetHeight);
+  const mirror = state.facingMode === 'user';
+  context.save();
+  if (mirror) {
+    context.translate(targetWidth, 0);
+    context.scale(-1, 1);
   }
-  if (videoEl) {
-    videoEl.srcObject = null;
-  }
-  if (!source) {
-    state.captureStream = null;
-    state.captureVideo = null;
-  }
-}
-
-async function ensureVideoElementReady(element) {
-  if (element.readyState >= 2 && element.videoWidth > 0) return;
-  await new Promise((resolve) => {
-    element.addEventListener('loadeddata', resolve, { once: true });
-  });
-  if (element.paused) {
-    try {
-      await element.play();
-    } catch (error) {
-      console.warn('High-res preview autoplay failed', error);
-    }
-  }
+  context.drawImage(
+    source,
+    mapping.sx,
+    mapping.sy,
+    mapping.sw,
+    mapping.sh,
+    0,
+    0,
+    targetWidth,
+    targetHeight
+  );
+  context.restore();
 }
