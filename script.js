@@ -166,14 +166,6 @@ function startRenderer() {
     if (state.renderCanvas.width !== width || state.renderCanvas.height !== height) {
       state.renderCanvas.width = width;
       state.renderCanvas.height = height;
-      // ensure the viewbox matches the video's native aspect ratio so CSS cover won't crop/zoom
-      try {
-        if (typeof width === 'number' && typeof height === 'number' && viewbox) {
-          viewbox.style.aspectRatio = width + '/' + height;
-        }
-      } catch (e) {
-        // ignore in case of CSP or style write restrictions
-      }
     }
 
     state.renderCtx.drawImage(video, 0, 0, width, height);
