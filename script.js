@@ -25,14 +25,9 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
-  cameraInventory: { environment: [], user: [] },
-  preferredDeviceIds: { environment: '', user: '' },
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
-video.addEventListener('loadedmetadata', syncViewboxAspect);
-window.addEventListener('resize', syncViewboxAspect);
-window.addEventListener('orientationchange', syncViewboxAspect);
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -147,16 +142,15 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
-  const constraints = buildCameraConstraints();
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: state.facingMode } },
+    audio: true,
+  });
 
   state.stream = stream;
   video.srcObject = stream;
   await ensureVideoReady();
   updateMirrorState();
-  await applyNaturalZoom(stream);
-  syncViewboxAspect();
-  await refreshCameraInventory(stream);
   startRenderer();
   setupMediaRecorder();
 }
@@ -348,13 +342,7 @@ async function switchCamera() {
     stopRecording();
   }
   switchBtn.disabled = true;
-
   state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
-  state.preferredDeviceIds[state.facingMode] =
-    state.preferredDeviceIds[state.facingMode] ||
-    state.cameraInventory[state.facingMode]?.[0]?.deviceId ||
-    '';
-
   try {
     await startCamera();
   } catch (error) {
@@ -363,96 +351,6 @@ async function switchCamera() {
   } finally {
     switchBtn.disabled = false;
   }
-}
-
-function buildCameraConstraints() {
-  const preferredDeviceId = state.preferredDeviceIds[state.facingMode];
-  const videoConstraints = preferredDeviceId
-    ? { deviceId: { exact: preferredDeviceId } }
-    : { facingMode: { ideal: state.facingMode } };
-
-  return {
-    video: videoConstraints,
-    audio: true,
-  };
-}
-
-async function refreshCameraInventory(stream) {
-  if (!navigator.mediaDevices?.enumerateDevices) return;
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const grouped = { environment: [], user: [] };
-
-  devices
-    .filter((device) => device.kind === 'videoinput')
-    .forEach((device) => {
-      const facing = guessFacing(device, stream) || 'environment';
-      grouped[facing].push({ deviceId: device.deviceId, label: device.label });
-    });
-
-  ['environment', 'user'].forEach((mode) => {
-    if (!grouped[mode].length) return;
-    grouped[mode].sort((a, b) => scoreCameraLabel(a.label) - scoreCameraLabel(b.label));
-    state.cameraInventory[mode] = grouped[mode];
-    const bestCandidate = grouped[mode][0]?.deviceId;
-    if (bestCandidate) {
-      state.preferredDeviceIds[mode] = bestCandidate;
-    }
-  });
-
-  const activeId = getTrackDeviceId(stream);
-  if (activeId) {
-    state.preferredDeviceIds[state.facingMode] = activeId;
-  }
-}
-
-function guessFacing(device, stream) {
-  const label = (device.label || '').toLowerCase();
-  if (label.includes('front') || label.includes('user')) return 'user';
-  if (label.includes('back') || label.includes('rear') || label.includes('environment')) return 'environment';
-
-  if (stream) {
-    const activeId = getTrackDeviceId(stream);
-    if (activeId && device.deviceId === activeId) {
-      return state.facingMode;
-    }
-  }
-  return '';
-}
-
-function scoreCameraLabel(label) {
-  if (!label) return 10;
-  const normalized = label.toLowerCase();
-  if (normalized.includes('main') || normalized.includes('standard') || normalized.includes('1x')) return 0;
-  if (normalized.includes('wide') && !normalized.includes('ultra')) return 1;
-  if (normalized.includes('tele')) return 2;
-  if (normalized.includes('ultra')) return 3;
-  return 5;
-}
-
-async function applyNaturalZoom(stream) {
-  const [track] = stream.getVideoTracks();
-  if (!track?.getCapabilities || !track.applyConstraints) return;
-  const capabilities = track.getCapabilities();
-  if (!capabilities.zoom) return;
-  const targetZoom = clampZoomToRange(1, capabilities.zoom.min, capabilities.zoom.max);
-  try {
-    await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
-  } catch (error) {
-    console.warn('Unable to adjust camera zoom', error);
-  }
-}
-
-function clampZoomToRange(value, min, max) {
-  let zoom = value;
-  if (typeof min === 'number' && zoom < min) zoom = min;
-  if (typeof max === 'number' && zoom > max) zoom = max;
-  return zoom;
-}
-
-function getTrackDeviceId(stream) {
-  const [track] = stream?.getVideoTracks() || [];
-  if (!track?.getSettings) return '';
-  return track.getSettings().deviceId || '';
 }
 
 function downloadBlob(blob, filename) {
@@ -534,55 +432,45 @@ function getTargetDimensions() {
 
 function drawVideoToContext(context, source, targetWidth, targetHeight) {
   if (!source?.videoWidth || !source?.videoHeight || !targetWidth || !targetHeight) return;
-  const sourceRatio = source.videoWidth / source.videoHeight;
-  const targetRatio = targetWidth / targetHeight;
-  let drawWidth = targetWidth;
-  let drawHeight = targetHeight;
-
-  if (sourceRatio > targetRatio) {
-    drawHeight = targetWidth / sourceRatio;
-  } else {
-    drawWidth = targetHeight * sourceRatio;
-  }
-
-  const dx = (targetWidth - drawWidth) / 2;
-  const dy = (targetHeight - drawHeight) / 2;
+  const mapping = computeDrawMapping(source.videoWidth, source.videoHeight, targetWidth, targetHeight);
   const mirror = state.facingMode === 'user';
-
   context.save();
-  context.fillStyle = '#000';
-  context.fillRect(0, 0, targetWidth, targetHeight);
   if (mirror) {
     context.translate(targetWidth, 0);
     context.scale(-1, 1);
-    context.drawImage(
-      source,
-      0,
-      0,
-      source.videoWidth,
-      source.videoHeight,
-      targetWidth - (dx + drawWidth),
-      dy,
-      drawWidth,
-      drawHeight
-    );
-  } else {
-    context.drawImage(
-      source,
-      0,
-      0,
-      source.videoWidth,
-      source.videoHeight,
-      dx,
-      dy,
-      drawWidth,
-      drawHeight
-    );
   }
+  context.drawImage(
+    source,
+    mapping.sx,
+    mapping.sy,
+    mapping.sw,
+    mapping.sh,
+    0,
+    0,
+    targetWidth,
+    targetHeight
+  );
   context.restore();
 }
 
-function syncViewboxAspect() {
-  if (!viewbox || !video.videoWidth || !video.videoHeight) return;
-  viewbox.style.setProperty('--camera-aspect', `${video.videoWidth} / ${video.videoHeight}`);
+function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) {
+  if (!videoWidth || !videoHeight || !targetWidth || !targetHeight) {
+    return { sx: 0, sy: 0, sw: videoWidth, sh: videoHeight };
+  }
+
+  const widthRatio = targetWidth / videoWidth;
+  const heightRatio = targetHeight / videoHeight;
+  const scale = Math.max(widthRatio, heightRatio);
+
+  const sourceWidth = targetWidth / scale;
+  const sourceHeight = targetHeight / scale;
+  const sx = (videoWidth - sourceWidth) / 2;
+  const sy = (videoHeight - sourceHeight) / 2;
+
+  return {
+    sx,
+    sy,
+    sw: sourceWidth,
+    sh: sourceHeight,
+  };
 }
