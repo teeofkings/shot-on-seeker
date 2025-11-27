@@ -25,14 +25,6 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
-  cameraInventory: {
-    environment: [],
-    user: [],
-  },
-  preferredDeviceIds: {
-    environment: '',
-    user: '',
-  },
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -150,14 +142,15 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
-  const stream = await openCameraStream();
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: state.facingMode } },
+    audio: true,
+  });
 
   state.stream = stream;
   video.srcObject = stream;
   await ensureVideoReady();
   updateMirrorState();
-  await applyNaturalZoom(stream);
-  await refreshCameraInventory(stream);
   startRenderer();
   setupMediaRecorder();
 }
@@ -358,132 +351,6 @@ async function switchCamera() {
   } finally {
     switchBtn.disabled = false;
   }
-}
-
-async function openCameraStream() {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error('getUserMedia not supported in this browser');
-  }
-
-  const candidates = buildCameraCandidates();
-  let lastError = null;
-
-  for (const constraints of candidates) {
-    try {
-      return await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (error) {
-      lastError = error;
-      console.warn('Camera constraint failed', constraints.video, error);
-    }
-  }
-
-  if (lastError) throw lastError;
-  throw new Error('Unable to access camera with requested constraints.');
-}
-
-function buildCameraCandidates() {
-  const facingMode = state.facingMode;
-  const queue = [];
-  const preferred = state.preferredDeviceIds[facingMode];
-  if (preferred) queue.push(preferred);
-
-  (state.cameraInventory[facingMode] || [])
-    .map((entry) => entry.deviceId)
-    .filter(Boolean)
-    .forEach((id) => {
-      if (!queue.includes(id)) queue.push(id);
-    });
-
-  const candidates = queue.map((deviceId) => ({
-    video: { deviceId: { exact: deviceId } },
-    audio: true,
-  }));
-
-  candidates.push({
-    video: { facingMode: { ideal: facingMode } },
-    audio: true,
-  });
-
-  return candidates;
-}
-
-async function refreshCameraInventory(activeStream) {
-  if (!navigator.mediaDevices?.enumerateDevices) return;
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const grouped = { environment: [], user: [] };
-
-  devices
-    .filter((device) => device.kind === 'videoinput')
-    .forEach((device) => {
-      const facing = classifyCamera(device, activeStream) || 'environment';
-      grouped[facing].push({
-        deviceId: device.deviceId,
-        label: device.label || '',
-      });
-    });
-
-  ['environment', 'user'].forEach((mode) => {
-    if (!grouped[mode].length) return;
-    grouped[mode].sort((a, b) => scoreCameraLabel(a.label) - scoreCameraLabel(b.label));
-    state.cameraInventory[mode] = grouped[mode];
-    const topCandidate = grouped[mode][0]?.deviceId;
-    if (topCandidate && !state.preferredDeviceIds[mode]) {
-      state.preferredDeviceIds[mode] = topCandidate;
-    }
-  });
-
-  const activeId = getActiveDeviceId(activeStream);
-  if (activeId) {
-    state.preferredDeviceIds[state.facingMode] = activeId;
-  }
-}
-
-function classifyCamera(device, activeStream) {
-  const label = (device.label || '').toLowerCase();
-  if (label.includes('front') || label.includes('user')) return 'user';
-  if (label.includes('back') || label.includes('rear') || label.includes('environment')) return 'environment';
-
-  const activeId = getActiveDeviceId(activeStream);
-  if (activeId && activeId === device.deviceId) {
-    return state.facingMode;
-  }
-  return '';
-}
-
-function scoreCameraLabel(label = '') {
-  const normalized = label.toLowerCase();
-  if (!normalized) return 10;
-  if (normalized.includes('main') || normalized.includes('standard') || normalized.includes('1x')) return 0;
-  if (normalized.includes('wide') && !normalized.includes('ultra')) return 1;
-  if (normalized.includes('tele') || normalized.includes('zoom')) return 2;
-  if (normalized.includes('ultra') || normalized.includes('macro')) return 3;
-  return 5;
-}
-
-async function applyNaturalZoom(stream) {
-  const [track] = stream.getVideoTracks();
-  if (!track?.getCapabilities || !track.applyConstraints) return;
-  const capabilities = track.getCapabilities();
-  if (!capabilities.zoom) return;
-  const targetZoom = clampZoomToRange(1, capabilities.zoom.min, capabilities.zoom.max);
-  try {
-    await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
-  } catch (error) {
-    console.warn('Unable to reset zoom', error);
-  }
-}
-
-function clampZoomToRange(value, min, max) {
-  let result = value;
-  if (typeof min === 'number' && result < min) result = min;
-  if (typeof max === 'number' && result > max) result = max;
-  return result;
-}
-
-function getActiveDeviceId(stream) {
-  const [track] = stream?.getVideoTracks() || [];
-  if (!track?.getSettings) return '';
-  return track.getSettings().deviceId || '';
 }
 
 function downloadBlob(blob, filename) {
