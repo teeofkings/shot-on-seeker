@@ -8,6 +8,7 @@ const recordLabel = document.querySelector('[data-record-label]');
 const cameraPage = document.getElementById('camera-page');
 const gate = document.getElementById('seeker-gate');
 const permissionError = document.getElementById('permission-error');
+const viewbox = document.querySelector('.viewbox');
 const CAMERA_RESOLUTION_HINTS = [
   { width: 2560, height: 1440 },
   { width: 1920, height: 1080 },
@@ -30,6 +31,7 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
+  isRendererActive: false,
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
@@ -143,22 +145,32 @@ async function startCamera() {
     throw new Error('getUserMedia not supported in this browser');
   }
 
+  setVideoLoadingState(true);
   clearError();
   stopRenderer();
   shutdownStream();
 
-  const stream = await openCameraStream();
-
-  state.stream = stream;
-  video.srcObject = stream;
-  await ensureVideoReady();
-  startRenderer();
-  setupMediaRecorder();
+  try {
+    const stream = await openCameraStream();
+    state.stream = stream;
+    video.srcObject = stream;
+    updateMirrorState();
+    await ensureVideoReady();
+    syncViewboxAspect();
+    setVideoLoadingState(false);
+    setupMediaRecorder();
+  } catch (error) {
+    setVideoLoadingState(false);
+    throw error;
+  }
 }
 
 function startRenderer() {
-  if (!state.renderCtx) return;
+  if (!state.renderCtx || state.isRendererActive) return;
+  state.isRendererActive = true;
+
   const draw = () => {
+    if (!state.isRendererActive) return;
     if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
@@ -171,7 +183,8 @@ function startRenderer() {
       state.renderCanvas.height = height;
     }
 
-    state.renderCtx.drawImage(video, 0, 0, width, height);
+    state.renderCtx.clearRect(0, 0, width, height);
+    drawVideoFrame(state.renderCtx, width, height);
     drawOverlay(state.renderCtx, width, height);
     state.animationFrameId = requestAnimationFrame(draw);
   };
@@ -180,6 +193,7 @@ function startRenderer() {
 }
 
 function stopRenderer() {
+  state.isRendererActive = false;
   if (state.animationFrameId) {
     cancelAnimationFrame(state.animationFrameId);
     state.animationFrameId = null;
@@ -237,7 +251,8 @@ async function handleCapture() {
 
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawVideoFrame(ctx, canvas.width, canvas.height);
   await stampOverlay(ctx, canvas.width, canvas.height);
 
   await new Promise((resolve, reject) => {
@@ -275,6 +290,18 @@ function drawOverlay(context, width, height) {
   drawWatermarkImage(context, width, height);
 }
 
+function drawVideoFrame(context, width, height) {
+  if (!video.videoWidth || !video.videoHeight) return;
+  const mirror = state.facingMode === 'user';
+  context.save();
+  if (mirror) {
+    context.translate(width, 0);
+    context.scale(-1, 1);
+  }
+  context.drawImage(video, 0, 0, width, height);
+  context.restore();
+}
+
 function drawGradientOverlay(context, width, height) {
   const gradientHeight = Math.max(60, Math.round(height * (138 / 752)));
   const gradient = context.createLinearGradient(0, height - gradientHeight, 0, height);
@@ -307,6 +334,7 @@ function drawWatermarkImage(context, width, height) {
 
 function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
+  startRenderer();
   state.recordedChunks = [];
   state.mediaRecorder.start();
   setRecordingState(true);
@@ -316,6 +344,7 @@ function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
   setRecordingState(false);
+  stopRenderer();
 }
 
 function setRecordingState(isRecording) {
@@ -348,42 +377,23 @@ async function openCameraStream() {
     throw new Error('getUserMedia not supported in this browser');
   }
 
-  const candidates = buildCameraConstraintSets();
-  let lastError = null;
-
-  for (const constraints of candidates) {
-    try {
-      return await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (error) {
-      lastError = error;
-      console.warn('Camera constraint attempt failed', error);
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  throw new Error('Unable to access the camera.');
-}
-
-function buildCameraConstraintSets() {
   const facingMode = { ideal: state.facingMode };
-  const candidates = CAMERA_RESOLUTION_HINTS.map(({ width, height }) => ({
-    video: {
-      facingMode,
-      width: { ideal: width },
-      height: { ideal: height },
-    },
-    audio: true,
+  const advanced = CAMERA_RESOLUTION_HINTS.map(({ width, height }) => ({
+    width,
+    height,
   }));
 
-  candidates.push({
-    video: { facingMode },
+  const constraints = {
+    video: {
+      facingMode,
+      width: { ideal: CAMERA_RESOLUTION_HINTS[0].width },
+      height: { ideal: CAMERA_RESOLUTION_HINTS[0].height },
+      advanced,
+    },
     audio: true,
-  });
+  };
 
-  return candidates;
+  return navigator.mediaDevices.getUserMedia(constraints);
 }
 
 function downloadBlob(blob, filename) {
@@ -417,6 +427,7 @@ function clearError() {
 
 function shutdownStream() {
   stopRenderer();
+  setVideoLoadingState(true);
   if (state.isRecording) {
     try {
       state.mediaRecorder?.stop();
@@ -439,4 +450,29 @@ function shutdownStream() {
   }
   state.mediaRecorder = null;
   state.recordedChunks = [];
+}
+
+function syncViewboxAspect() {
+  if (!viewbox) return;
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return;
+  const ratio = `${width} / ${height}`;
+  viewbox.style.setProperty('--camera-aspect', ratio);
+  viewbox.style.aspectRatio = ratio;
+}
+
+function updateMirrorState() {
+  const mirror = state.facingMode === 'user';
+  video.classList.toggle('mirrored', mirror);
+}
+
+function setVideoLoadingState(isLoading) {
+  if (isLoading) {
+    video.classList.add('camera-loading');
+    video.classList.remove('camera-ready');
+  } else {
+    video.classList.remove('camera-loading');
+    video.classList.add('camera-ready');
+  }
 }

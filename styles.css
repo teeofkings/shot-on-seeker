@@ -91,7 +91,7 @@ body {
   position: relative;
   background: #000;
   /* allows it to scale while keeping the aspect ratio shape */
-  aspect-ratio: auto;
+  aspect-ratio: var(--camera-aspect, auto);
   max-height: none;
   flex: 1;
 }
@@ -106,6 +106,16 @@ body {
 
   object-fit: cover;
   object-position: center;
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+
+.viewbox video.camera-loading {
+  opacity: 0;
+}
+
+.viewbox video.mirrored {
+  transform: scaleX(-1);
 }
 
 .viewbox::after {
