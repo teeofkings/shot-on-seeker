@@ -160,12 +160,19 @@ async function startCamera() {
 function startRenderer() {
   if (!state.renderCtx || state.animationFrameId) return;
   const draw = () => {
-    if (!video.videoWidth) {
+    const sourceVideo = selectRenderSource();
+    if (!sourceVideo?.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
     }
 
-    const { width: targetWidth, height: targetHeight } = getTargetDimensions();
+    const baseSize = getTargetDimensions();
+    const targetSize =
+      sourceVideo === video
+        ? baseSize
+        : determineExportSize(sourceVideo, baseSize.width, baseSize.height);
+    const targetWidth = targetSize.width;
+    const targetHeight = targetSize.height;
     if (!targetWidth || !targetHeight) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
@@ -177,7 +184,7 @@ function startRenderer() {
     }
 
     state.renderCtx.clearRect(0, 0, targetWidth, targetHeight);
-    drawVideoToContext(state.renderCtx, video, targetWidth, targetHeight);
+    drawVideoToContext(state.renderCtx, sourceVideo, targetWidth, targetHeight);
     drawOverlay(state.renderCtx, targetWidth, targetHeight);
     state.animationFrameId = requestAnimationFrame(draw);
   };
@@ -247,11 +254,17 @@ async function handleCapture() {
     return;
   }
 
-  const source = await getHighResSource();
-  canvas.width = source.width;
-  canvas.height = source.height;
-  drawVideoSource(ctx, source.video, source.width, source.height);
-  await stampOverlay(ctx, source.width, source.height);
+  const hiResSource = await getHighResSource().catch((error) => {
+    console.warn('Falling back to preview stream for capture', error);
+    return null;
+  });
+  const sourceVideo = hiResSource?.video || video;
+  const exportSize = determineExportSize(sourceVideo, targetWidth, targetHeight);
+
+  canvas.width = exportSize.width;
+  canvas.height = exportSize.height;
+  drawVideoToContext(ctx, sourceVideo, exportSize.width, exportSize.height);
+  await stampOverlay(ctx, exportSize.width, exportSize.height);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -268,7 +281,9 @@ async function handleCapture() {
     );
   });
 
-  releaseHighResSource(source);
+  if (hiResSource?.stream) {
+    releaseHighResSource(hiResSource);
+  }
 }
 
 async function ensureVideoReady() {
@@ -322,9 +337,19 @@ function drawWatermarkImage(context, width, height) {
 
 async function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
-  const source = await getHighResSource();
-  state.captureStream = source.stream;
-  state.captureVideo = source.video;
+  let source = null;
+  try {
+    source = await getHighResSource();
+  } catch (error) {
+    console.warn('Falling back to preview stream for recording', error);
+  }
+
+  if (source?.stream && source?.video) {
+    state.captureStream = source.stream;
+    state.captureVideo = source.video;
+  } else {
+    releaseHighResSource();
+  }
   state.recordedChunks = [];
   state.mediaRecorder.start();
   setRecordingState(true);
@@ -482,6 +507,26 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
     sy,
     sw: sourceWidth,
     sh: sourceHeight,
+  };
+}
+
+function selectRenderSource() {
+  if (state.captureVideo && state.captureVideo.readyState >= 2) {
+    return state.captureVideo;
+  }
+  return video;
+}
+
+function determineExportSize(sourceVideo, baseWidth, baseHeight) {
+  if (!sourceVideo?.videoWidth || !sourceVideo?.videoHeight) {
+    return { width: baseWidth, height: baseHeight };
+  }
+  const maxWidthScale = sourceVideo.videoWidth / baseWidth;
+  const maxHeightScale = sourceVideo.videoHeight / baseHeight;
+  const scale = Math.max(1, Math.min(maxWidthScale, maxHeightScale, 3));
+  return {
+    width: Math.round(baseWidth * scale),
+    height: Math.round(baseHeight * scale),
   };
 }
 
