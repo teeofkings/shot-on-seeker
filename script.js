@@ -440,13 +440,35 @@ function cleanupRecordingSource() {
 }
 
 async function createExportSource() {
-  const constraints = getHighResolutionConstraint();
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-  const videoEl = document.createElement('video');
-  Object.assign(videoEl, { autoplay: true, muted: true, playsInline: true });
-  videoEl.srcObject = stream;
-  await ensureVideoElementReady(videoEl);
-  return { stream, video: videoEl };
+  const deviceId = getActiveDeviceId();
+  const candidates = CAMERA_RESOLUTION_STEPS.map(({ width, height }) =>
+    buildHighResolutionConstraint(width, height, deviceId)
+  );
+
+  const fallbackWidth = video.videoWidth || 1280;
+  const fallbackHeight = video.videoHeight || 720;
+  candidates.push(buildHighResolutionConstraint(fallbackWidth, fallbackHeight, deviceId));
+
+  let lastError = null;
+  for (const constraints of candidates) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const videoEl = document.createElement('video');
+      Object.assign(videoEl, { autoplay: true, muted: true, playsInline: true });
+      videoEl.srcObject = stream;
+      await ensureVideoElementReady(videoEl);
+      return { stream, video: videoEl };
+    } catch (error) {
+      lastError = error;
+      console.warn('Export stream constraint failed', constraints.video, error);
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error('Unable to obtain a high-resolution export stream.');
 }
 
 function releaseExportSource(source) {
@@ -456,14 +478,17 @@ function releaseExportSource(source) {
   }
 }
 
-function getHighResolutionConstraint() {
-  const { width, height } = CAMERA_RESOLUTION_STEPS[0];
+function buildHighResolutionConstraint(width, height, deviceId) {
+  const videoConstraints = {
+    width: { ideal: width, max: width },
+    height: { ideal: height, max: height },
+    facingMode: { ideal: state.facingMode },
+  };
+  if (deviceId) {
+    videoConstraints.deviceId = { exact: deviceId };
+  }
   return {
-    video: {
-      facingMode: { ideal: state.facingMode },
-      width: { ideal: width, max: width },
-      height: { ideal: height, max: height },
-    },
+    video: videoConstraints,
     audio: false,
   };
 }
@@ -485,4 +510,10 @@ async function ensureVideoElementReady(element) {
 function updateMirrorState() {
   const shouldMirror = state.facingMode === 'user';
   video.classList.toggle('mirrored', shouldMirror);
+}
+
+function getActiveDeviceId() {
+  const [track] = state.stream?.getVideoTracks() || [];
+  if (!track || typeof track.getSettings !== 'function') return '';
+  return track.getSettings().deviceId || '';
 }
