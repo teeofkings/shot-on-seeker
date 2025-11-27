@@ -57,7 +57,6 @@ body {
 .app {
   width: min(420px, 100vw);
   height: 100dvh;
- 
   display: flex;
   flex-direction: column;
   gap: 1rem
@@ -67,11 +66,11 @@ body {
 .gate {
   width: 100%;
   flex: 1 1 auto;
-  padding: clamp(10px, 3vw, 16px);
+  padding: .75rem .75rem 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(10px, 2vw, 18px);
+  gap: 1rem;
   min-height: 0;
 }
 
