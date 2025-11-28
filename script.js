@@ -148,28 +148,7 @@ async function detectSeekerDevice() {
 
   const hintString = await collectUserAgentHints();
   const keyword = SEEKER_KEYWORDS.find((needle) => hintString.includes(needle));
-  if (keyword) {
-    return { isSeeker: true };
-  }
-
-  const capabilityMatch = await probeSeekerCapabilities();
-  return { isSeeker: capabilityMatch };
-}
-
-async function probeSeekerCapabilities() {
-  if (!navigator.mediaDevices?.getUserMedia) return false;
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false,
-    });
-    const [track] = stream.getVideoTracks();
-    const label = (track?.label || '').toLowerCase();
-    stream.getTracks().forEach((t) => t.stop());
-    return SEEKER_KEYWORDS.some((needle) => label.includes(needle));
-  } catch {
-    return false;
-  }
+  return { isSeeker: Boolean(keyword) };
 }
 
 async function collectUserAgentHints() {
