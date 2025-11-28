@@ -15,6 +15,7 @@ const exportShareBtn = document.getElementById('export-share');
 const exportSaveBtn = document.getElementById('export-save');
 const exportRetakeBtn = document.getElementById('export-retake');
 const liveWatermark = document.getElementById('live-watermark');
+const recordIcon = document.querySelector('[data-record-icon]');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
@@ -514,6 +515,10 @@ function setRecordingState(isRecording) {
   recordBtn.classList.toggle('recording', isRecording);
   if (recordLabel) {
     recordLabel.textContent = isRecording ? 'Stop' : 'Record';
+  }
+  if (recordIcon) {
+    recordIcon.src = isRecording ? 'icons/camcorder_off_line.svg' : 'icons/camcorder_line.svg';
+    recordIcon.alt = isRecording ? 'Stop recording' : 'Start recording';
   }
 }
 

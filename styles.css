@@ -190,6 +190,10 @@ body {
   padding: 14px;
 }
 
+#export-retake {
+  background: #ffe6ea;
+}
+
 .icon {
   width: 20px;
   height: 20px;
@@ -213,6 +217,10 @@ body {
 
 .control.recording {
   background: #ffe6ea;
+}
+
+.control.recording .label {
+  color: #ff4242;
 }
 
 .error {
@@ -303,8 +311,8 @@ body {
 }
 
 .video-preview__play img {
-  width: 56px;
-  height: 56px;
+  width: 70px;
+  height: 70px;
 }
 
 .video-preview__play.hidden {
@@ -327,6 +335,8 @@ body {
 .export-actions .label {
   white-space: nowrap;
 }
+
+
 
 
 
