@@ -14,6 +14,7 @@ const exportPreview = document.querySelector('[data-export-preview]');
 const exportShareBtn = document.getElementById('export-share');
 const exportSaveBtn = document.getElementById('export-save');
 const exportRetakeBtn = document.getElementById('export-retake');
+const liveWatermark = document.getElementById('live-watermark');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
@@ -44,6 +45,9 @@ const state = {
   shareFallbackPending: false,
   pendingShareBlob: null,
 };
+
+let watermarkMetrics = null;
+let watermarkMetricsDirty = true;
 
 const exportState = {
   type: '',
@@ -88,6 +92,8 @@ function bindUIEvents() {
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
+  window.addEventListener('resize', invalidateWatermarkMetrics);
+  window.addEventListener('orientationchange', invalidateWatermarkMetrics);
 }
 
 function setupExportControls() {
@@ -358,21 +364,56 @@ function drawGradientOverlay(context, width, height) {
 
 function drawWatermarkImage(context, width, height) {
   if (!watermarkLoaded || !watermarkImage.naturalWidth) return;
-  const edgePadding = Math.max(16, Math.round(width * (24 / 366)));
-  const desiredWidth = Math.round(width * (103 / 366));
   const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
-  const drawWidth = Math.min(desiredWidth, watermarkImage.naturalWidth);
-  const drawHeight = drawWidth / ratio;
+  const metrics = ensureWatermarkMetrics();
   context.save();
   context.globalAlpha = 0.98;
-  context.drawImage(
-    watermarkImage,
-    edgePadding,
-    height - drawHeight - edgePadding,
-    drawWidth,
-    drawHeight
-  );
+  if (metrics) {
+    const drawWidth = width * metrics.widthRatio;
+    const drawHeight = drawWidth / ratio;
+    const drawX = width * metrics.leftRatio;
+    const bottomPadding = height * metrics.bottomRatio;
+    const drawY = height - drawHeight - bottomPadding;
+    context.drawImage(watermarkImage, drawX, drawY, drawWidth, drawHeight);
+  } else {
+    const edgePadding = Math.max(16, Math.round(width * (24 / 366)));
+    const desiredWidth = Math.round(width * (103 / 366));
+    const drawWidth = Math.min(desiredWidth, watermarkImage.naturalWidth);
+    const drawHeight = drawWidth / ratio;
+    context.drawImage(
+      watermarkImage,
+      edgePadding,
+      height - drawHeight - edgePadding,
+      drawWidth,
+      drawHeight
+    );
+  }
   context.restore();
+}
+
+function ensureWatermarkMetrics() {
+  if (!watermarkMetricsDirty && watermarkMetrics) {
+    return watermarkMetrics;
+  }
+  if (!viewbox || !liveWatermark || cameraPage.classList.contains('hidden')) {
+    return watermarkMetrics;
+  }
+  const viewboxRect = viewbox.getBoundingClientRect();
+  const watermarkRect = liveWatermark.getBoundingClientRect();
+  if (!viewboxRect.width || !viewboxRect.height || !watermarkRect.width || !watermarkRect.height) {
+    return watermarkMetrics;
+  }
+  watermarkMetrics = {
+    widthRatio: watermarkRect.width / viewboxRect.width,
+    leftRatio: (watermarkRect.left - viewboxRect.left) / viewboxRect.width,
+    bottomRatio: (viewboxRect.bottom - watermarkRect.bottom) / viewboxRect.height,
+  };
+  watermarkMetricsDirty = false;
+  return watermarkMetrics;
+}
+
+function invalidateWatermarkMetrics() {
+  watermarkMetricsDirty = true;
 }
 
 function startRecording() {
@@ -500,8 +541,8 @@ function setupShareRecording() {
   const baseSize = getTargetDimensions();
   if (!baseSize.width || !baseSize.height) return false;
   const hiSize = getHiResDimensions(baseSize.width, baseSize.height);
-  const shareWidth = Math.min(SHARE_TARGET_WIDTH * EXPORT_SCALE, hiSize.width);
-  const shareHeight = Math.min(SHARE_TARGET_HEIGHT * EXPORT_SCALE, hiSize.height);
+  const shareWidth = SHARE_TARGET_WIDTH * EXPORT_SCALE;
+  const shareHeight = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
   if (!shareWidth || !shareHeight) return false;
 
   if (!state.shareCanvas) {
@@ -692,8 +733,8 @@ function canvasToBlob(canvas, type = 'image/png', quality = 0.95) {
 async function createSharePhotoBlob(sourceCanvas) {
   if (!sourceCanvas?.width || !sourceCanvas?.height) return null;
   const shareCanvas = document.createElement('canvas');
-  shareCanvas.width = Math.min(SHARE_TARGET_WIDTH * EXPORT_SCALE, sourceCanvas.width);
-  shareCanvas.height = Math.min(SHARE_TARGET_HEIGHT * EXPORT_SCALE, sourceCanvas.height);
+  shareCanvas.width = SHARE_TARGET_WIDTH * EXPORT_SCALE;
+  shareCanvas.height = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
   const shareCtx = shareCanvas.getContext('2d');
   shareCtx.fillStyle = '#000';
   shareCtx.fillRect(0, 0, shareCanvas.width, shareCanvas.height);
@@ -728,8 +769,8 @@ async function createShareVideoBlob(originalBlob) {
   const canvas = document.createElement('canvas');
   const targetWidth = SHARE_TARGET_WIDTH * EXPORT_SCALE;
   const targetHeight = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
-  canvas.width = Math.min(targetWidth, videoEl.videoWidth || targetWidth);
-  canvas.height = Math.min(targetHeight, videoEl.videoHeight || targetHeight);
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
   const ctx = canvas.getContext('2d');
   const mapping = computeBottomCropMapping(
     videoEl.videoWidth,

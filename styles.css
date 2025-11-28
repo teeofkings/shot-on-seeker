@@ -125,7 +125,7 @@ body {
   position: absolute;
   bottom: 24px;
   left: 24px;
-  width: clamp(100px, 27%, 104px);
+  width: 5.9375rem;
   height: auto;
   pointer-events: none;
   z-index: 1;
