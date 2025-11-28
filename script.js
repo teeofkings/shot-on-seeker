@@ -203,18 +203,32 @@ async function startCamera() {
 }
 
 async function buildVideoConstraints() {
+  const base = {
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    frameRate: { ideal: 60, max: 60 },
+  };
   if (state.facingMode !== 'environment') {
-    return { facingMode: { ideal: 'user' } };
+    return {
+      ...base,
+      facingMode: { ideal: 'user' },
+    };
   }
   try {
     const mainCamId = await getMainBackCameraDeviceId();
     if (mainCamId) {
-      return { deviceId: { exact: mainCamId } };
+      return {
+        ...base,
+        deviceId: { exact: mainCamId },
+      };
     }
   } catch (error) {
     console.warn('Main camera detection failed', error);
   }
-  return { facingMode: { ideal: 'environment' } };
+  return {
+    ...base,
+    facingMode: { ideal: 'environment' },
+  };
 }
 
 async function getMainBackCameraDeviceId() {
@@ -267,6 +281,8 @@ async function applyCameraStabilization(stream) {
 
 function startRenderer() {
   if (!state.renderCtx || state.animationFrameId) return;
+  state.renderCtx.imageSmoothingEnabled = true;
+  state.renderCtx.imageSmoothingQuality = 'high';
   const draw = () => {
     if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
@@ -621,6 +637,8 @@ function setupShareRecording() {
   state.shareCanvas.width = shareWidth;
   state.shareCanvas.height = shareHeight;
   state.shareCtx = state.shareCanvas.getContext('2d');
+  state.shareCtx.imageSmoothingEnabled = true;
+  state.shareCtx.imageSmoothingQuality = 'high';
 
   const videoStream = state.shareCanvas.captureStream(SHARE_CAPTURE_FPS);
   const mixedStream = new MediaStream();
@@ -806,6 +824,8 @@ async function createSharePhotoBlob(sourceCanvas) {
   shareCanvas.width = SHARE_TARGET_WIDTH * EXPORT_SCALE;
   shareCanvas.height = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
   const shareCtx = shareCanvas.getContext('2d');
+  shareCtx.imageSmoothingEnabled = true;
+  shareCtx.imageSmoothingQuality = 'high';
   shareCtx.fillStyle = '#000';
   shareCtx.fillRect(0, 0, shareCanvas.width, shareCanvas.height);
   const mapping = computeBottomCropMapping(
@@ -842,6 +862,8 @@ async function createShareVideoBlob(originalBlob) {
   canvas.width = targetWidth;
   canvas.height = targetHeight;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   const mapping = computeBottomCropMapping(
     videoEl.videoWidth,
     videoEl.videoHeight,
