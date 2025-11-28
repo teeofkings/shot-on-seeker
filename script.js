@@ -188,7 +188,7 @@ async function startCamera() {
   shutdownStream();
 
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: state.facingMode } },
+    video: await buildVideoConstraints(),
     audio: true,
   });
 
@@ -196,8 +196,44 @@ async function startCamera() {
   video.srcObject = stream;
   await ensureVideoReady();
   updateMirrorState();
+  syncViewboxAspect();
   startRenderer();
   setupMediaRecorder();
+}
+
+async function buildVideoConstraints() {
+  if (state.facingMode !== 'environment') {
+    return { facingMode: { ideal: 'user' } };
+  }
+  try {
+    const mainCamId = await getMainBackCameraDeviceId();
+    if (mainCamId) {
+      return { deviceId: { exact: mainCamId } };
+    }
+  } catch (error) {
+    console.warn('Main camera detection failed', error);
+  }
+  return { facingMode: { ideal: 'environment' } };
+}
+
+async function getMainBackCameraDeviceId() {
+  if (!navigator.mediaDevices?.enumerateDevices) return null;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const videoInputs = devices.filter((device) => device.kind === 'videoinput');
+  if (!videoInputs.length) return null;
+
+  const mainKeywords = ['main', 'wide', 'ois', '108', 'back 0', 'camera 0'];
+  const keywordMatch = videoInputs.find((device) =>
+    mainKeywords.some((keyword) => (device.label || '').toLowerCase().includes(keyword))
+  );
+  if (keywordMatch) return keywordMatch.deviceId;
+
+  const backCams = videoInputs
+    .filter((device) => (device.label || '').toLowerCase().includes('back'))
+    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  if (backCams.length) return backCams[0].deviceId;
+
+  return videoInputs[0].deviceId;
 }
 
 function startRenderer() {
