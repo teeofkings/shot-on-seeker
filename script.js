@@ -936,7 +936,10 @@ function clearError() {
 async function shareToX(blob, filename) {
   downloadBlob(blob, filename);
   const tweetUrl = new URL('https://x.com/intent/tweet');
-  tweetUrl.searchParams.set('text', 'Shot on Seeker #ShotOnSeeker');
+  tweetUrl.searchParams.set(
+    'text',
+    'Your Seeker isn’t complete until you try this...\n\nFlex your shots with Shot on Seeker.\n\nhttps://shot-on-seeker.vercel.app'
+  );
   window.open(tweetUrl.toString(), '_blank', 'noopener');
 }
 
