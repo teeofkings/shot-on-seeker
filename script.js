@@ -160,23 +160,10 @@ async function collectUserAgentHints() {
   }
 
 async function shareToX(blob, filename) {
-  const file = new File([blob], filename, { type: blob.type || 'image/png' });
-  if (navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: 'Shot on Seeker',
-        text: '#ShotOnSeeker',
-      });
-      return;
-    } catch (error) {
-      if (error?.name === 'AbortError') return;
-      console.warn('Native share failed, falling back to download', error);
-    }
-  }
-
   downloadBlob(blob, filename);
-  window.open('https://x.com/intent/tweet?text=Shot%20on%20Seeker%20%23ShotOnSeeker', '_blank', 'noopener');
+  const tweetUrl = new URL('https://x.com/intent/tweet');
+  tweetUrl.searchParams.set('text', 'Shot on Seeker #ShotOnSeeker');
+  window.open(tweetUrl.toString(), '_blank', 'noopener');
 }
 
   return hints.join(' ');
@@ -288,7 +275,7 @@ function setupMediaRecorder() {
       type: 'video',
       previewUrl,
       originalBlob: blob,
-      shareBlob,
+      shareBlob: shareBlob || blob,
       originalName: baseName,
       shareName: baseName.replace(`.${extension}`, `-x.${extension}`),
       mimeType: blob.type,
@@ -321,7 +308,7 @@ async function handleCapture() {
   await stampOverlay(hiCtx, hiSize.width, hiSize.height);
 
   const originalBlob = await canvasToBlob(hiCanvas);
-  const shareBlob = await createSharePhotoBlob(hiCanvas);
+  const shareBlob = (await createSharePhotoBlob(hiCanvas)) || originalBlob;
   const previewUrl = URL.createObjectURL(originalBlob);
   const baseName = `seeker-photo-${timestamp()}.png`;
 
@@ -559,7 +546,6 @@ async function createSharePhotoBlob(sourceCanvas) {
     shareCanvas.width,
     shareCanvas.height
   );
-  await stampOverlay(shareCtx, shareCanvas.width, shareCanvas.height);
   return canvasToBlob(shareCanvas);
 }
 
