@@ -19,6 +19,7 @@ const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobi
 const FORCE_QUERY_PARAM = 'forceSeeker';
 const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
+const EXPORT_SCALE = 2;
 
 const state = {
   mediaRecorder: null,
@@ -211,20 +212,21 @@ function startRenderer() {
       return;
     }
 
-    const { width: targetWidth, height: targetHeight } = getTargetDimensions();
-    if (!targetWidth || !targetHeight) {
+    const baseSize = getTargetDimensions();
+    if (!baseSize.width || !baseSize.height) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
     }
 
-    if (state.renderCanvas.width !== targetWidth || state.renderCanvas.height !== targetHeight) {
-      state.renderCanvas.width = targetWidth;
-      state.renderCanvas.height = targetHeight;
+    const hiSize = getHiResDimensions(baseSize.width, baseSize.height);
+    if (state.renderCanvas.width !== hiSize.width || state.renderCanvas.height !== hiSize.height) {
+      state.renderCanvas.width = hiSize.width;
+      state.renderCanvas.height = hiSize.height;
     }
 
-    state.renderCtx.clearRect(0, 0, targetWidth, targetHeight);
-    drawVideoToContext(state.renderCtx, video, targetWidth, targetHeight);
-    drawOverlay(state.renderCtx, targetWidth, targetHeight);
+    state.renderCtx.clearRect(0, 0, hiSize.width, hiSize.height);
+    drawVideoToContext(state.renderCtx, video, hiSize.width, hiSize.height);
+    drawOverlay(state.renderCtx, hiSize.width, hiSize.height);
     state.animationFrameId = requestAnimationFrame(draw);
   };
 
@@ -304,25 +306,22 @@ async function handleCapture() {
   if (cameraPage.classList.contains('hidden')) return;
   await ensureVideoReady();
 
-  const { width: targetWidth, height: targetHeight } = getTargetDimensions();
-  if (!targetWidth || !targetHeight) {
+  const baseSize = getTargetDimensions();
+  if (!baseSize.width || !baseSize.height) {
     showError('Capture unavailable: invalid viewbox size.');
     return;
   }
 
-  const baseCanvas = document.createElement('canvas');
-  baseCanvas.width = targetWidth;
-  baseCanvas.height = targetHeight;
-  const baseCtx = baseCanvas.getContext('2d');
-  drawVideoToContext(baseCtx, video, targetWidth, targetHeight);
+  const hiSize = getHiResDimensions(baseSize.width, baseSize.height);
+  const hiCanvas = document.createElement('canvas');
+  hiCanvas.width = hiSize.width;
+  hiCanvas.height = hiSize.height;
+  const hiCtx = hiCanvas.getContext('2d');
+  drawVideoToContext(hiCtx, video, hiSize.width, hiSize.height);
+  await stampOverlay(hiCtx, hiSize.width, hiSize.height);
 
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-  canvas.getContext('2d').drawImage(baseCanvas, 0, 0);
-  await stampOverlay(canvas.getContext('2d'), targetWidth, targetHeight);
-
-  const originalBlob = await canvasToBlob(canvas);
-  const shareBlob = await createSharePhotoBlob(baseCanvas);
+  const originalBlob = await canvasToBlob(hiCanvas);
+  const shareBlob = await createSharePhotoBlob(hiCanvas);
   const previewUrl = URL.createObjectURL(originalBlob);
   const baseName = `seeker-photo-${timestamp()}.png`;
 
@@ -758,6 +757,22 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
     sy,
     sw: sourceWidth,
     sh: sourceHeight,
+  };
+}
+
+function getHiResDimensions(baseWidth, baseHeight) {
+  if (!baseWidth || !baseHeight) {
+    return { width: baseWidth, height: baseHeight, scale: 1 };
+  }
+  const videoWidth = video?.videoWidth || baseWidth;
+  const videoHeight = video?.videoHeight || baseHeight;
+  const widthScale = videoWidth / baseWidth || EXPORT_SCALE;
+  const heightScale = videoHeight / baseHeight || EXPORT_SCALE;
+  const scale = Math.max(1, Math.min(EXPORT_SCALE, widthScale, heightScale));
+  return {
+    width: Math.round(baseWidth * scale),
+    height: Math.round(baseHeight * scale),
+    scale,
   };
 }
 
