@@ -48,6 +48,7 @@ const state = {
 
 let watermarkMetrics = null;
 let watermarkMetricsDirty = true;
+let preferredDeviceId = null;
 
 const exportState = {
   type: '',
@@ -92,7 +93,10 @@ function bindUIEvents() {
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
-  video.addEventListener('loadedmetadata', syncViewboxAspect);
+  video.addEventListener('loadedmetadata', () => {
+    syncViewboxAspect();
+    cachePreferredDeviceId();
+  });
   window.addEventListener('resize', invalidateWatermarkMetrics);
   window.addEventListener('orientationchange', invalidateWatermarkMetrics);
 }
@@ -189,11 +193,7 @@ async function startCamera() {
   shutdownStream();
 
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { ideal: state.facingMode },
-      width: { ideal: 3840 },
-      height: { ideal: 2160 },
-    },
+    video: buildVideoConstraints(),
     audio: true,
   });
 
@@ -204,6 +204,16 @@ async function startCamera() {
   syncViewboxAspect();
   startRenderer();
   setupMediaRecorder();
+}
+
+function buildVideoConstraints() {
+  const constraints = {
+    facingMode: { ideal: state.facingMode },
+  };
+  if (preferredDeviceId) {
+    constraints.deviceId = { exact: preferredDeviceId };
+  }
+  return constraints;
 }
 
 function startRenderer() {
@@ -427,6 +437,25 @@ function syncViewboxAspect() {
   viewbox.style.setProperty('--camera-aspect', `${video.videoWidth} / ${video.videoHeight}`);
 }
 
+async function cachePreferredDeviceId() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter((device) => device.kind === 'videoinput');
+    const keywords =
+      state.facingMode === 'environment' ? ['108', 'main', 'wide', 'ois'] : ['front', 'selfie'];
+    const match = videoDevices.find((device) => {
+      const label = (device.label || '').toLowerCase();
+      return keywords.some((keyword) => label.includes(keyword));
+    });
+    if (match?.deviceId) {
+      preferredDeviceId = match.deviceId;
+    }
+  } catch (error) {
+    console.warn('Device enumeration failed', error);
+  }
+}
+
 function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
   state.recordedChunks = [];
@@ -473,6 +502,7 @@ async function switchCamera() {
     stopRecording();
   }
   switchBtn.disabled = true;
+  preferredDeviceId = null;
   state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
   try {
     await startCamera();
