@@ -93,10 +93,7 @@ function bindUIEvents() {
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
-  video.addEventListener('loadedmetadata', () => {
-    syncViewboxAspect();
-    cachePreferredDeviceId();
-  });
+  video.addEventListener('loadedmetadata', syncViewboxAspect);
   window.addEventListener('resize', invalidateWatermarkMetrics);
   window.addEventListener('orientationchange', invalidateWatermarkMetrics);
 }
@@ -193,7 +190,7 @@ async function startCamera() {
   shutdownStream();
 
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: buildVideoConstraints(),
+    video: buildCameraConstraints(),
     audio: true,
   });
 
@@ -202,13 +199,16 @@ async function startCamera() {
   await ensureVideoReady();
   updateMirrorState();
   syncViewboxAspect();
+  cachePreferredDeviceId();
+  await normalizeCameraZoom(stream);
   startRenderer();
   setupMediaRecorder();
 }
 
-function buildVideoConstraints() {
+function buildCameraConstraints() {
   const constraints = {
     facingMode: { ideal: state.facingMode },
+    advanced: [{ zoom: 1 }],
   };
   if (preferredDeviceId) {
     constraints.deviceId = { exact: preferredDeviceId };
@@ -438,7 +438,7 @@ function syncViewboxAspect() {
 }
 
 async function cachePreferredDeviceId() {
-  if (!navigator.mediaDevices?.enumerateDevices) return;
+  if (preferredDeviceId || !navigator.mediaDevices?.enumerateDevices) return;
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter((device) => device.kind === 'videoinput');
@@ -453,6 +453,19 @@ async function cachePreferredDeviceId() {
     }
   } catch (error) {
     console.warn('Device enumeration failed', error);
+  }
+}
+
+async function normalizeCameraZoom(stream) {
+  const [track] = stream.getVideoTracks();
+  if (!track?.getCapabilities || !track.applyConstraints) return;
+  const capabilities = track.getCapabilities();
+  if (!capabilities.zoom) return;
+  const zoomValue = capabilities.zoom.min ?? 1;
+  try {
+    await track.applyConstraints({ advanced: [{ zoom: zoomValue }] });
+  } catch (error) {
+    console.warn('Unable to normalize zoom', error);
   }
 }
 
