@@ -34,6 +34,15 @@ const state = {
   renderCanvas: document.createElement('canvas'),
   renderCtx: null,
   isSeekerDevice: false,
+  shareCanvas: null,
+  shareCtx: null,
+  shareRecorder: null,
+  shareChunks: [],
+  shareStream: null,
+  shareVideoStream: null,
+  shareRecorderActive: false,
+  shareFallbackPending: false,
+  pendingShareBlob: null,
 };
 
 const exportState = {
@@ -208,6 +217,9 @@ function startRenderer() {
     state.renderCtx.clearRect(0, 0, hiSize.width, hiSize.height);
     drawVideoToContext(state.renderCtx, video, hiSize.width, hiSize.height);
     drawOverlay(state.renderCtx, hiSize.width, hiSize.height);
+    if (state.shareRecorderActive && state.shareCtx && state.shareCanvas) {
+      drawShareFrame();
+    }
     state.animationFrameId = requestAnimationFrame(draw);
   };
 
@@ -268,7 +280,10 @@ function setupMediaRecorder() {
       shareName: baseName.replace(`.${extension}`, `-x.${extension}`),
       mimeType: blob.type,
     });
-    prepareShareVideoBlob(blob, previewUrl);
+    if (state.shareFallbackPending) {
+      prepareShareVideoBlob(blob, previewUrl);
+      state.shareFallbackPending = false;
+    }
   };
 }
 
@@ -363,13 +378,32 @@ function drawWatermarkImage(context, width, height) {
 function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
   state.recordedChunks = [];
+  const shareReady = setupShareRecording();
+  state.shareFallbackPending = !shareReady;
   state.mediaRecorder.start();
+  if (shareReady && state.shareRecorder) {
+    try {
+      state.shareRecorder.start();
+      state.shareRecorderActive = true;
+    } catch (error) {
+      console.warn('Unable to start share recorder', error);
+      cleanupShareRecording();
+      state.shareFallbackPending = true;
+    }
+  }
   setRecordingState(true);
 }
 
 function stopRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
   state.mediaRecorder.stop();
+  if (state.shareRecorder && state.shareRecorder.state === 'recording') {
+    try {
+      state.shareRecorder.stop();
+    } catch (error) {
+      console.warn('Unable to stop share recorder', error);
+    }
+  }
   setRecordingState(false);
 }
 
@@ -420,6 +454,11 @@ function showExportScreen(config) {
   exportState.previewUrl = config.previewUrl;
   exportState.mimeType = config.mimeType || '';
 
+  if (!exportState.shareBlob && exportState.type === 'video' && state.pendingShareBlob) {
+    exportState.shareBlob = state.pendingShareBlob;
+    state.pendingShareBlob = null;
+  }
+
   if (config.type === 'photo') {
     exportPreview.innerHTML = `<img src="${config.previewUrl}" alt="Captured preview">`;
   } else {
@@ -453,6 +492,130 @@ async function prepareShareVideoBlob(originalBlob, previewUrlSnapshot) {
   } catch (error) {
     console.warn('Unable to create share-sized video', error);
   }
+}
+
+function setupShareRecording() {
+  cleanupShareRecording();
+  if (!state.stream) return false;
+  const baseSize = getTargetDimensions();
+  if (!baseSize.width || !baseSize.height) return false;
+  const hiSize = getHiResDimensions(baseSize.width, baseSize.height);
+  const shareWidth = Math.min(SHARE_TARGET_WIDTH * EXPORT_SCALE, hiSize.width);
+  const shareHeight = Math.min(SHARE_TARGET_HEIGHT * EXPORT_SCALE, hiSize.height);
+  if (!shareWidth || !shareHeight) return false;
+
+  if (!state.shareCanvas) {
+    state.shareCanvas = document.createElement('canvas');
+  }
+  state.shareCanvas.width = shareWidth;
+  state.shareCanvas.height = shareHeight;
+  state.shareCtx = state.shareCanvas.getContext('2d');
+
+  const videoStream = state.shareCanvas.captureStream(SHARE_CAPTURE_FPS);
+  const mixedStream = new MediaStream();
+  videoStream.getVideoTracks().forEach((track) => mixedStream.addTrack(track));
+  state.stream
+    .getAudioTracks()
+    .forEach((track) => mixedStream.addTrack(track));
+
+  const mimeType = getSupportedMimeType();
+  try {
+    state.shareRecorder = new MediaRecorder(mixedStream, mimeType ? { mimeType } : undefined);
+  } catch (error) {
+    console.warn('Share recorder unavailable', error);
+    videoStream.getTracks().forEach((track) => track.stop());
+    mixedStream.getTracks().forEach((track) => track.stop());
+    state.shareRecorder = null;
+    state.shareStream = null;
+    state.shareVideoStream = null;
+    return false;
+  }
+
+  state.shareVideoStream = videoStream;
+  state.shareStream = mixedStream;
+  state.shareChunks = [];
+  state.shareRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) {
+      state.shareChunks.push(event.data);
+    }
+  };
+  state.shareRecorder.onstop = handleShareRecordingStop;
+  return true;
+}
+
+function handleShareRecordingStop() {
+  state.shareRecorderActive = false;
+  const chunks = state.shareChunks.slice();
+  const mimeType = state.shareRecorder?.mimeType || state.mediaRecorder?.mimeType || 'video/mp4';
+  cleanupShareRecording();
+  if (!chunks.length) {
+    if (
+      exportState.type === 'video' &&
+      exportState.originalBlob &&
+      !state.shareFallbackPending
+    ) {
+      state.shareFallbackPending = true;
+      prepareShareVideoBlob(exportState.originalBlob, exportState.previewUrl);
+    }
+    return;
+  }
+  state.shareFallbackPending = false;
+  const shareBlob = new Blob(chunks, { type: mimeType });
+  if (exportState.type === 'video') {
+    exportState.shareBlob = shareBlob;
+    if (exportShareBtn) {
+      exportShareBtn.disabled = false;
+    }
+  } else {
+    state.pendingShareBlob = shareBlob;
+  }
+}
+
+function cleanupShareRecording() {
+  if (state.shareRecorder) {
+    state.shareRecorder.ondataavailable = null;
+    state.shareRecorder.onstop = null;
+    if (state.shareRecorder.state === 'recording') {
+      try {
+        state.shareRecorder.stop();
+      } catch (error) {
+        console.warn('Unable to stop active share recorder', error);
+      }
+    }
+  }
+  if (state.shareStream) {
+    state.shareStream.getTracks().forEach((track) => track.stop());
+  }
+  if (state.shareVideoStream) {
+    state.shareVideoStream.getTracks().forEach((track) => track.stop());
+  }
+  state.shareRecorder = null;
+  state.shareStream = null;
+  state.shareVideoStream = null;
+  state.shareChunks = [];
+  state.shareRecorderActive = false;
+}
+
+function drawShareFrame() {
+  if (!state.shareCtx || !state.shareCanvas) return;
+  const mapping = computeBottomCropMapping(
+    state.renderCanvas.width,
+    state.renderCanvas.height,
+    state.shareCanvas.width,
+    state.shareCanvas.height
+  );
+  state.shareCtx.clearRect(0, 0, state.shareCanvas.width, state.shareCanvas.height);
+  state.shareCtx.drawImage(
+    state.renderCanvas,
+    mapping.sx,
+    mapping.sy,
+    mapping.sw,
+    mapping.sh,
+    0,
+    0,
+    state.shareCanvas.width,
+    state.shareCanvas.height
+  );
 }
 
 function hideExportScreen() {
@@ -697,6 +860,7 @@ function shutdownStream() {
     state.mixedStream.getTracks().forEach((track) => track.stop());
     state.mixedStream = null;
   }
+  cleanupShareRecording();
   state.mediaRecorder = null;
   state.recordedChunks = [];
 }
