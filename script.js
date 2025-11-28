@@ -452,6 +452,11 @@ function invalidateWatermarkMetrics() {
   watermarkMetricsDirty = true;
 }
 
+function syncViewboxAspect() {
+  if (!viewbox || !video?.videoWidth || !video?.videoHeight) return;
+  viewbox.style.setProperty('--camera-aspect', `${video.videoWidth} / ${video.videoHeight}`);
+}
+
 function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
   state.recordedChunks = [];
