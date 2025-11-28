@@ -19,6 +19,7 @@ const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobi
 const FORCE_QUERY_PARAM = 'forceSeeker';
 const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
+const SHARE_CAPTURE_FPS = 24;
 const EXPORT_SCALE = 3;
 
 const state = {
@@ -256,23 +257,18 @@ function setupMediaRecorder() {
     });
     state.recordedChunks = [];
     const previewUrl = URL.createObjectURL(blob);
-    let shareBlob = null;
-    try {
-      shareBlob = await createShareVideoBlob(blob);
-    } catch (error) {
-      console.warn('Unable to create share-sized video', error);
-    }
     const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
     const baseName = `seeker-video-${timestamp()}.${extension}`;
     showExportScreen({
       type: 'video',
       previewUrl,
       originalBlob: blob,
-      shareBlob: shareBlob || blob,
+      shareBlob: null,
       originalName: baseName,
       shareName: baseName.replace(`.${extension}`, `-x.${extension}`),
       mimeType: blob.type,
     });
+    prepareShareVideoBlob(blob, previewUrl);
   };
 }
 
@@ -443,6 +439,22 @@ function showExportScreen(config) {
   exportPage.classList.remove('hidden');
 }
 
+async function prepareShareVideoBlob(originalBlob, previewUrlSnapshot) {
+  try {
+    const shareBlob = await createShareVideoBlob(originalBlob);
+    if (!shareBlob) return;
+    if (exportState.previewUrl !== previewUrlSnapshot) {
+      return;
+    }
+    exportState.shareBlob = shareBlob;
+    if (exportShareBtn) {
+      exportShareBtn.disabled = false;
+    }
+  } catch (error) {
+    console.warn('Unable to create share-sized video', error);
+  }
+}
+
 function hideExportScreen() {
   const videoEl = exportPreview.querySelector('video');
   if (videoEl) {
@@ -517,8 +529,8 @@ function canvasToBlob(canvas, type = 'image/png', quality = 0.95) {
 async function createSharePhotoBlob(sourceCanvas) {
   if (!sourceCanvas?.width || !sourceCanvas?.height) return null;
   const shareCanvas = document.createElement('canvas');
-  shareCanvas.width = SHARE_TARGET_WIDTH * EXPORT_SCALE;
-  shareCanvas.height = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
+  shareCanvas.width = Math.min(SHARE_TARGET_WIDTH * EXPORT_SCALE, sourceCanvas.width);
+  shareCanvas.height = Math.min(SHARE_TARGET_HEIGHT * EXPORT_SCALE, sourceCanvas.height);
   const shareCtx = shareCanvas.getContext('2d');
   shareCtx.fillStyle = '#000';
   shareCtx.fillRect(0, 0, shareCanvas.width, shareCanvas.height);
@@ -551,8 +563,10 @@ async function createShareVideoBlob(originalBlob) {
   await ensureVideoElementPrepped(videoEl);
 
   const canvas = document.createElement('canvas');
-  canvas.width = SHARE_TARGET_WIDTH * EXPORT_SCALE;
-  canvas.height = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
+  const targetWidth = SHARE_TARGET_WIDTH * EXPORT_SCALE;
+  const targetHeight = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
+  canvas.width = Math.min(targetWidth, videoEl.videoWidth || targetWidth);
+  canvas.height = Math.min(targetHeight, videoEl.videoHeight || targetHeight);
   const ctx = canvas.getContext('2d');
   const mapping = computeBottomCropMapping(
     videoEl.videoWidth,
@@ -560,7 +574,7 @@ async function createShareVideoBlob(originalBlob) {
     canvas.width,
     canvas.height
   );
-  const videoStream = canvas.captureStream(30);
+  const videoStream = canvas.captureStream(SHARE_CAPTURE_FPS);
   const mixedStream = new MediaStream();
   videoStream.getVideoTracks().forEach((track) => mixedStream.addTrack(track));
 
