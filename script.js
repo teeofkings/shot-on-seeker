@@ -159,13 +159,6 @@ async function collectUserAgentHints() {
     }
   }
 
-async function shareToX(blob, filename) {
-  downloadBlob(blob, filename);
-  const tweetUrl = new URL('https://x.com/intent/tweet');
-  tweetUrl.searchParams.set('text', 'Shot on Seeker #ShotOnSeeker');
-  window.open(tweetUrl.toString(), '_blank', 'noopener');
-}
-
   return hints.join(' ');
 }
 
@@ -651,6 +644,13 @@ function clearError() {
   permissionError.classList.add('hidden');
 }
 
+async function shareToX(blob, filename) {
+  downloadBlob(blob, filename);
+  const tweetUrl = new URL('https://x.com/intent/tweet');
+  tweetUrl.searchParams.set('text', 'Shot on Seeker #ShotOnSeeker');
+  window.open(tweetUrl.toString(), '_blank', 'noopener');
+}
+
 function shutdownStream() {
   stopRenderer();
   if (state.isRecording) {
@@ -750,11 +750,7 @@ function getHiResDimensions(baseWidth, baseHeight) {
   if (!baseWidth || !baseHeight) {
     return { width: baseWidth, height: baseHeight, scale: 1 };
   }
-  const videoWidth = video?.videoWidth || baseWidth;
-  const videoHeight = video?.videoHeight || baseHeight;
-  const widthScale = videoWidth / baseWidth || EXPORT_SCALE;
-  const heightScale = videoHeight / baseHeight || EXPORT_SCALE;
-  const scale = Math.max(1, Math.min(EXPORT_SCALE, widthScale, heightScale));
+  const scale = Math.max(1, EXPORT_SCALE);
   return {
     width: Math.round(baseWidth * scale),
     height: Math.round(baseHeight * scale),
