@@ -18,6 +18,10 @@ const liveWatermark = document.getElementById('live-watermark');
 
 const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobile', 'sm-skr', 'skr'];
 const FORCE_QUERY_PARAM = 'forceSeeker';
+const CAMERA_KEYWORDS = {
+  environment: ['main', 'wide', 'ois', '108', 'back 0', 'camera 0'],
+  user: ['front', 'selfie'],
+};
 const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
 const SHARE_CAPTURE_FPS = 24;
@@ -48,6 +52,10 @@ const state = {
 
 let watermarkMetrics = null;
 let watermarkMetricsDirty = true;
+const cachedDeviceIds = {
+  environment: null,
+  user: null,
+};
 
 const exportState = {
   type: '',
@@ -92,6 +100,7 @@ function bindUIEvents() {
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
+  video.addEventListener('loadedmetadata', handleVideoMetadata);
   window.addEventListener('resize', invalidateWatermarkMetrics);
   window.addEventListener('orientationchange', invalidateWatermarkMetrics);
 }
@@ -197,38 +206,29 @@ async function startCamera() {
   await ensureVideoReady();
   updateMirrorState();
   syncViewboxAspect();
-  await applyCameraStabilization(stream);
   startRenderer();
   setupMediaRecorder();
 }
 
 async function buildVideoConstraints() {
-  const base = {
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    frameRate: { ideal: 60, max: 60 },
-  };
-  if (state.facingMode !== 'environment') {
-    return {
-      ...base,
-      facingMode: { ideal: 'user' },
-    };
+  const mode = state.facingMode === 'environment' ? 'environment' : 'user';
+  const cachedId = cachedDeviceIds[mode];
+  if (cachedId) {
+    return { deviceId: { exact: cachedId } };
+  }
+  if (mode !== 'environment') {
+    return { facingMode: { ideal: 'user' } };
   }
   try {
     const mainCamId = await getMainBackCameraDeviceId();
     if (mainCamId) {
-      return {
-        ...base,
-        deviceId: { exact: mainCamId },
-      };
+      cachedDeviceIds.environment = mainCamId;
+      return { deviceId: { exact: mainCamId } };
     }
   } catch (error) {
     console.warn('Main camera detection failed', error);
   }
-  return {
-    ...base,
-    facingMode: { ideal: 'environment' },
-  };
+  return { facingMode: { ideal: 'environment' } };
 }
 
 async function getMainBackCameraDeviceId() {
@@ -237,9 +237,9 @@ async function getMainBackCameraDeviceId() {
   const videoInputs = devices.filter((device) => device.kind === 'videoinput');
   if (!videoInputs.length) return null;
 
-  const mainKeywords = ['main', 'wide', 'ois', '108', 'back 0', 'camera 0'];
+  const keywords = CAMERA_KEYWORDS.environment;
   const keywordMatch = videoInputs.find((device) =>
-    mainKeywords.some((keyword) => (device.label || '').toLowerCase().includes(keyword))
+    keywords.some((keyword) => (device.label || '').toLowerCase().includes(keyword))
   );
   if (keywordMatch) return keywordMatch.deviceId;
 
@@ -251,38 +251,8 @@ async function getMainBackCameraDeviceId() {
   return videoInputs[0].deviceId;
 }
 
-async function applyCameraStabilization(stream) {
-  const [track] = stream.getVideoTracks();
-  if (!track) return;
-
-  if ('contentHint' in track) {
-    track.contentHint = 'motion';
-  }
-
-  if (!track.getCapabilities || !track.applyConstraints) return;
-  const capabilities = track.getCapabilities();
-  const advancedConstraints = {};
-
-  if (capabilities.zoom && typeof capabilities.zoom.min === 'number') {
-    advancedConstraints.zoom = capabilities.zoom.min;
-  }
-  if ('imageStabilization' in capabilities) {
-    advancedConstraints.imageStabilization = true;
-  }
-
-  if (Object.keys(advancedConstraints).length === 0) return;
-
-  try {
-    await track.applyConstraints({ advanced: [advancedConstraints] });
-  } catch (error) {
-    console.warn('Unable to apply stabilization constraints', error);
-  }
-}
-
 function startRenderer() {
   if (!state.renderCtx || state.animationFrameId) return;
-  state.renderCtx.imageSmoothingEnabled = true;
-  state.renderCtx.imageSmoothingQuality = 'high';
   const draw = () => {
     if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
@@ -502,6 +472,11 @@ function syncViewboxAspect() {
   viewbox.style.setProperty('--camera-aspect', `${video.videoWidth} / ${video.videoHeight}`);
 }
 
+function handleVideoMetadata() {
+  syncViewboxAspect();
+  invalidateWatermarkMetrics();
+}
+
 function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
   state.recordedChunks = [];
@@ -637,8 +612,6 @@ function setupShareRecording() {
   state.shareCanvas.width = shareWidth;
   state.shareCanvas.height = shareHeight;
   state.shareCtx = state.shareCanvas.getContext('2d');
-  state.shareCtx.imageSmoothingEnabled = true;
-  state.shareCtx.imageSmoothingQuality = 'high';
 
   const videoStream = state.shareCanvas.captureStream(SHARE_CAPTURE_FPS);
   const mixedStream = new MediaStream();
@@ -824,8 +797,6 @@ async function createSharePhotoBlob(sourceCanvas) {
   shareCanvas.width = SHARE_TARGET_WIDTH * EXPORT_SCALE;
   shareCanvas.height = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
   const shareCtx = shareCanvas.getContext('2d');
-  shareCtx.imageSmoothingEnabled = true;
-  shareCtx.imageSmoothingQuality = 'high';
   shareCtx.fillStyle = '#000';
   shareCtx.fillRect(0, 0, shareCanvas.width, shareCanvas.height);
   const mapping = computeBottomCropMapping(
@@ -862,8 +833,6 @@ async function createShareVideoBlob(originalBlob) {
   canvas.width = targetWidth;
   canvas.height = targetHeight;
   const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
   const mapping = computeBottomCropMapping(
     videoEl.videoWidth,
     videoEl.videoHeight,
