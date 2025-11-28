@@ -84,7 +84,7 @@ body {
   overflow: hidden;
   position: relative;
   background: #000;
-  aspect-ratio: var(--camera-aspect, 3 / 4);
+  aspect-ratio: auto;
   max-height: none;
   flex: 1 1 auto;
   min-height: 0;
