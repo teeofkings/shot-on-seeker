@@ -188,7 +188,14 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
-  const stream = await openPreferredCameraStream();
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: state.facingMode },
+      width: { ideal: 3840 },
+      height: { ideal: 2160 },
+    },
+    audio: true,
+  });
 
   state.stream = stream;
   video.srcObject = stream;
@@ -236,95 +243,6 @@ function stopRenderer() {
     cancelAnimationFrame(state.animationFrameId);
     state.animationFrameId = null;
   }
-}
-
-async function openPreferredCameraStream() {
-  const constraintSets = buildCameraConstraintSets();
-  let lastError = null;
-  for (const constraints of constraintSets) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      await upgradeTrackToHighRes(stream);
-      return stream;
-    } catch (error) {
-      lastError = error;
-      console.warn('Camera constraint attempt failed', error);
-    }
-  }
-  if (lastError) {
-    throw lastError;
-  }
-  throw new Error('Unable to access the camera with the requested constraints');
-}
-
-function buildCameraConstraintSets() {
-  const facingMode = { ideal: state.facingMode };
-  const advanced = createResolutionHints();
-  return [
-    {
-      video: {
-        facingMode,
-        width: { ideal: 3840 },
-        height: { ideal: 2160 },
-        advanced,
-      },
-      audio: true,
-    },
-    {
-      video: {
-        facingMode,
-        width: { ideal: 2560 },
-        height: { ideal: 1440 },
-        advanced,
-      },
-      audio: true,
-    },
-    {
-      video: {
-        facingMode,
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-      },
-      audio: true,
-    },
-    {
-      video: { facingMode },
-      audio: true,
-    },
-  ];
-}
-
-function createResolutionHints() {
-  return [
-    { width: { ideal: 4000 }, height: { ideal: 3000 } },
-    { width: { ideal: 3840 }, height: { ideal: 2160 } },
-    { width: { ideal: 3000 }, height: { ideal: 2000 } },
-  ];
-}
-
-async function upgradeTrackToHighRes(stream) {
-  const [track] = stream.getVideoTracks();
-  if (!track?.getCapabilities || !track.applyConstraints) return;
-  const capabilities = track.getCapabilities();
-  const constraints = {};
-  if (capabilities.width?.max) {
-    constraints.width = { ideal: capabilities.width.max };
-  }
-  if (capabilities.height?.max) {
-    constraints.height = { ideal: capabilities.height.max };
-  }
-  if (Object.keys(constraints).length) {
-    try {
-      await track.applyConstraints(constraints);
-    } catch (error) {
-      console.warn('Unable to upgrade track resolution', error);
-    }
-  }
-}
-
-function syncViewboxAspect() {
-  if (!viewbox || !video?.videoWidth || !video?.videoHeight) return;
-  viewbox.style.setProperty('--camera-aspect', `${video.videoWidth} / ${video.videoHeight}`);
 }
 
 function setupMediaRecorder() {
@@ -502,6 +420,11 @@ function ensureWatermarkMetrics() {
 
 function invalidateWatermarkMetrics() {
   watermarkMetricsDirty = true;
+}
+
+function syncViewboxAspect() {
+  if (!viewbox || !video?.videoWidth || !video?.videoHeight) return;
+  viewbox.style.setProperty('--camera-aspect', `${video.videoWidth} / ${video.videoHeight}`);
 }
 
 function startRecording() {
