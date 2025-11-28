@@ -19,7 +19,7 @@ const SEEKER_KEYWORDS = ['seeker', 'solana mobile', 'solanamobile', 'solana-mobi
 const FORCE_QUERY_PARAM = 'forceSeeker';
 const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
-const EXPORT_SCALE = 2;
+const EXPORT_SCALE = 3;
 
 const state = {
   mediaRecorder: null,
@@ -278,7 +278,7 @@ function setupMediaRecorder() {
 
 function getSupportedMimeType() {
   if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
-  const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+  const candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
   return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';
 }
 
@@ -517,12 +517,12 @@ function canvasToBlob(canvas, type = 'image/png', quality = 0.95) {
 async function createSharePhotoBlob(sourceCanvas) {
   if (!sourceCanvas?.width || !sourceCanvas?.height) return null;
   const shareCanvas = document.createElement('canvas');
-  shareCanvas.width = SHARE_TARGET_WIDTH;
-  shareCanvas.height = SHARE_TARGET_HEIGHT;
+  shareCanvas.width = SHARE_TARGET_WIDTH * EXPORT_SCALE;
+  shareCanvas.height = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
   const shareCtx = shareCanvas.getContext('2d');
   shareCtx.fillStyle = '#000';
   shareCtx.fillRect(0, 0, shareCanvas.width, shareCanvas.height);
-  const mapping = computeDrawMapping(
+  const mapping = computeBottomCropMapping(
     sourceCanvas.width,
     sourceCanvas.height,
     shareCanvas.width,
@@ -551,16 +551,26 @@ async function createShareVideoBlob(originalBlob) {
   await ensureVideoElementPrepped(videoEl);
 
   const canvas = document.createElement('canvas');
-  canvas.width = SHARE_TARGET_WIDTH;
-  canvas.height = SHARE_TARGET_HEIGHT;
+  canvas.width = SHARE_TARGET_WIDTH * EXPORT_SCALE;
+  canvas.height = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const mapping = computeDrawMapping(videoEl.videoWidth, videoEl.videoHeight, canvas.width, canvas.height);
-  const stream = canvas.captureStream(30);
+  const mapping = computeBottomCropMapping(
+    videoEl.videoWidth,
+    videoEl.videoHeight,
+    canvas.width,
+    canvas.height
+  );
+  const videoStream = canvas.captureStream(30);
+  const mixedStream = new MediaStream();
+  videoStream.getVideoTracks().forEach((track) => mixedStream.addTrack(track));
+
+  const playbackStream = videoEl.captureStream ? videoEl.captureStream() : null;
+  if (playbackStream) {
+    playbackStream.getAudioTracks().forEach((track) => mixedStream.addTrack(track));
+  }
   let recorder;
   try {
-    recorder = new MediaRecorder(stream, originalBlob.type ? { mimeType: originalBlob.type } : undefined);
+    recorder = new MediaRecorder(mixedStream, originalBlob.type ? { mimeType: originalBlob.type } : undefined);
   } catch (error) {
     console.warn('Unable to instantiate MediaRecorder for share video', error);
     URL.revokeObjectURL(videoEl.src);
@@ -744,6 +754,33 @@ function computeDrawMapping(videoWidth, videoHeight, targetWidth, targetHeight) 
     sw: sourceWidth,
     sh: sourceHeight,
   };
+}
+
+function computeBottomCropMapping(sourceWidth, sourceHeight, targetWidth, targetHeight) {
+  if (!sourceWidth || !sourceHeight || !targetWidth || !targetHeight) {
+    return { sx: 0, sy: 0, sw: sourceWidth, sh: sourceHeight };
+  }
+  const targetRatio = targetWidth / targetHeight;
+  const sourceRatio = sourceWidth / sourceHeight;
+
+  let sw;
+  let sh;
+  let sx;
+  let sy;
+
+  if (sourceRatio > targetRatio) {
+    sh = sourceHeight;
+    sw = sh * targetRatio;
+    sx = (sourceWidth - sw) / 2;
+    sy = 0;
+  } else {
+    sw = sourceWidth;
+    sh = sw / targetRatio;
+    sx = 0;
+    sy = Math.max(0, sourceHeight - sh); // crop from top, keep bottom
+  }
+
+  return { sx, sy, sw, sh };
 }
 
 function getHiResDimensions(baseWidth, baseHeight) {
