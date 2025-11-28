@@ -197,6 +197,7 @@ async function startCamera() {
   await ensureVideoReady();
   updateMirrorState();
   syncViewboxAspect();
+  await applyCameraStabilization(stream);
   startRenderer();
   setupMediaRecorder();
 }
@@ -234,6 +235,34 @@ async function getMainBackCameraDeviceId() {
   if (backCams.length) return backCams[0].deviceId;
 
   return videoInputs[0].deviceId;
+}
+
+async function applyCameraStabilization(stream) {
+  const [track] = stream.getVideoTracks();
+  if (!track) return;
+
+  if ('contentHint' in track) {
+    track.contentHint = 'motion';
+  }
+
+  if (!track.getCapabilities || !track.applyConstraints) return;
+  const capabilities = track.getCapabilities();
+  const advancedConstraints = {};
+
+  if (capabilities.zoom && typeof capabilities.zoom.min === 'number') {
+    advancedConstraints.zoom = capabilities.zoom.min;
+  }
+  if ('imageStabilization' in capabilities) {
+    advancedConstraints.imageStabilization = true;
+  }
+
+  if (Object.keys(advancedConstraints).length === 0) return;
+
+  try {
+    await track.applyConstraints({ advanced: [advancedConstraints] });
+  } catch (error) {
+    console.warn('Unable to apply stabilization constraints', error);
+  }
 }
 
 function startRenderer() {
