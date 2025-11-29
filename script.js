@@ -296,10 +296,10 @@ async function getMainBackCameraDeviceId() {
 function getBaseVideoSettings(mode) {
   if (mode === 'environment') {
     return {
-      width: { ideal: 2560, max: 3840 },
-      height: { ideal: 1440, max: 2160 },
+      width: { ideal: 1920, max: 2560 },
+      height: { ideal: 1080, max: 1440 },
       frameRate: { ideal: 24, max: 30 },
-      advanced: [{ zoom: 1 }],
+      advanced: [{ zoom: 1 }, { imageStabilization: 'on' }, { videoStabilizationMode: 'on' }],
     };
   }
   return {
