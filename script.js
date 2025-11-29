@@ -220,7 +220,6 @@ async function startCamera() {
   await ensureVideoReady();
   updateMirrorState();
   syncViewboxAspect();
-  startRenderer();
   setupMediaRecorder();
 }
 
@@ -525,6 +524,7 @@ function startRecording() {
   state.recordedChunks = [];
   const shareReady = setupShareRecording();
   state.shareFallbackPending = !shareReady;
+  startRenderer();
   state.mediaRecorder.start();
   if (shareReady && state.shareRecorder) {
     try {
@@ -550,6 +550,7 @@ function stopRecording() {
     }
   }
   setRecordingState(false);
+  stopRenderer();
 }
 
 function setRecordingState(isRecording) {
@@ -1020,6 +1021,9 @@ function shutdownStream() {
 function updateMirrorState() {
   const shouldMirror = state.facingMode === 'user';
   video.classList.toggle('mirrored', shouldMirror);
+  if (viewbox) {
+    viewbox.classList.toggle('no-gradient', shouldMirror);
+  }
 }
 
 function getViewboxSize() {
