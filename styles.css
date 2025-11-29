@@ -116,14 +116,6 @@ body {
   background: linear-gradient(180deg, rgba(20, 63, 62, 0) 0%, #143F3E 116.53%);
 }
 
-.viewbox.no-gradient::after {
-  display: none;
-}
-
-body.front-camera #camera-page .viewbox::after {
-  display: none;
-}
-
 #export-page .viewbox::after,
 #export-page #live-watermark {
   display: none;

@@ -485,9 +485,7 @@ async function stampOverlay(context, width, height, facingMode = state.activeOve
 }
 
 function drawOverlay(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
-  if (facingMode !== 'user') {
-    drawGradientOverlay(context, width, height);
-  }
+  drawGradientOverlay(context, width, height);
   drawWatermarkImage(context, width, height, facingMode);
 }
 
@@ -1070,13 +1068,6 @@ function shutdownStream() {
 function updateMirrorState() {
   const shouldMirror = state.facingMode === 'user';
   video.classList.toggle('mirrored', shouldMirror);
-  if (viewbox) {
-    viewbox.classList.toggle('no-gradient', shouldMirror);
-  }
-  if (document.body) {
-    document.body.classList.toggle('front-camera', shouldMirror);
-    document.body.classList.toggle('back-camera', !shouldMirror);
-  }
   state.activeOverlayMode = state.facingMode;
 }
 
