@@ -25,15 +25,15 @@ const CAMERA_KEYWORDS = {
 };
 const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
-const SHARE_CAPTURE_FPS = 20;
+const SHARE_CAPTURE_FPS = 24;
 const EXPORT_SCALE = 3;
-const RECORDING_SCALE = 3;
-const RENDER_FPS = 20;
-const VIDEO_BITRATE = 8_000_000;
+const RECORDING_SCALE = 2;
+const RENDER_FPS = 30;
+const VIDEO_BITRATE = 6_000_000;
 const SHARE_VIDEO_BITRATE = 5_000_000;
 const PREVIEW_FILTERS = {
   environment: 'brightness(1.05) contrast(0.95)',
-  user: 'brightness(1.06) contrast(0.92)',
+  user: 'brightness(1.1) contrast(0.88)',
 };
 const VIDEO_MIME_CANDIDATES = [
   'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
@@ -84,6 +84,9 @@ const exportState = {
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
+if (document.body) {
+  document.body.classList.add('back-camera');
+}
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -112,8 +115,12 @@ setupExportControls();
 
 function bindUIEvents() {
   captureBtn.addEventListener('click', handleCapture);
-  recordBtn.addEventListener('click', () => {
-    state.isRecording ? stopRecording() : startRecording();
+  recordBtn.addEventListener('click', async () => {
+    if (state.isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
   });
   switchBtn.addEventListener('click', switchCamera);
   window.addEventListener('beforeunload', shutdownStream);
@@ -485,15 +492,20 @@ async function stampOverlay(context, width, height, facingMode = state.activeOve
 }
 
 function drawOverlay(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
-  drawGradientOverlay(context, width, height);
+  drawGradientOverlay(context, width, height, facingMode);
   drawWatermarkImage(context, width, height, facingMode);
 }
 
-function drawGradientOverlay(context, width, height) {
+function drawGradientOverlay(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
   const gradientHeight = Math.max(60, Math.round(height * (138 / 752)));
   const gradient = context.createLinearGradient(0, height - gradientHeight, 0, height);
-  gradient.addColorStop(0, 'rgba(20, 63, 62, 0)');
-  gradient.addColorStop(1, '#143f3e');
+  if (facingMode === 'user') {
+    gradient.addColorStop(0, 'rgba(3, 3, 3, 0)');
+    gradient.addColorStop(1, 'rgba(6, 6, 6, 0.55)');
+  } else {
+    gradient.addColorStop(0, 'rgba(20, 63, 62, 0)');
+    gradient.addColorStop(1, '#143f3e');
+  }
   context.save();
   context.fillStyle = gradient;
   context.fillRect(0, height - gradientHeight, width, gradientHeight);
@@ -564,8 +576,9 @@ function handleVideoMetadata() {
   invalidateWatermarkMetrics();
 }
 
-function startRecording() {
+async function startRecording() {
   if (!state.mediaRecorder || state.mediaRecorder.state === 'recording') return;
+  await ensureVideoReady();
   state.recordedChunks = [];
   const shareReady = setupShareRecording();
   state.shareFallbackPending = !shareReady;
@@ -850,6 +863,9 @@ function wireVideoPreviewControls() {
   const videoEl = exportPreview.querySelector('video');
   const playButton = exportPreview.querySelector('[data-preview-play]');
   if (!videoEl || !playButton) return;
+  videoEl.controls = true;
+  videoEl.preload = 'auto';
+  videoEl.playsInline = true;
 
   const updatePlayButton = () => {
     if (videoEl.paused || videoEl.ended) {
@@ -1068,6 +1084,10 @@ function shutdownStream() {
 function updateMirrorState() {
   const shouldMirror = state.facingMode === 'user';
   video.classList.toggle('mirrored', shouldMirror);
+  if (document.body) {
+    document.body.classList.toggle('front-camera', shouldMirror);
+    document.body.classList.toggle('back-camera', !shouldMirror);
+  }
   state.activeOverlayMode = state.facingMode;
 }
 
