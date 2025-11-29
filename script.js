@@ -27,6 +27,7 @@ const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
 const SHARE_CAPTURE_FPS = 24;
 const EXPORT_SCALE = 3;
+const RENDER_FPS = 24;
 const PREVIEW_FILTERS = {
   environment: 'brightness(1.05) contrast(0.95)',
   user: 'none',
@@ -295,11 +296,18 @@ function getBaseVideoSettings(mode) {
 
 function startRenderer() {
   if (!state.renderCtx || state.animationFrameId) return;
-  const draw = () => {
+  const minInterval = 1000 / RENDER_FPS;
+  let lastFrameTime = 0;
+  const draw = (timestamp = performance.now()) => {
     if (!video.videoWidth) {
       state.animationFrameId = requestAnimationFrame(draw);
       return;
     }
+    if (timestamp - lastFrameTime < minInterval) {
+      state.animationFrameId = requestAnimationFrame(draw);
+      return;
+    }
+    lastFrameTime = timestamp;
 
     const baseSize = getTargetDimensions();
     if (!baseSize.width || !baseSize.height) {
@@ -341,7 +349,7 @@ function setupMediaRecorder() {
 
   if (!state.stream) return;
 
-  const canvasStream = state.renderCanvas.captureStream(30);
+  const canvasStream = state.renderCanvas.captureStream(RENDER_FPS);
   const mixedStream = new MediaStream();
   const [videoTrack] = canvasStream.getVideoTracks();
   if (videoTrack) mixedStream.addTrack(videoTrack);
@@ -440,7 +448,9 @@ async function stampOverlay(context, width, height) {
 }
 
 function drawOverlay(context, width, height) {
-  drawGradientOverlay(context, width, height);
+  if (state.facingMode !== 'user') {
+    drawGradientOverlay(context, width, height);
+  }
   drawWatermarkImage(context, width, height);
 }
 
