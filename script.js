@@ -27,6 +27,7 @@ const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
 const SHARE_CAPTURE_FPS = 24;
 const EXPORT_SCALE = 3;
+const PREVIEW_FILTER = 'brightness(1.05) contrast(0.95)';
 
 const state = {
   mediaRecorder: null,
@@ -197,12 +198,21 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
+  const videoConstraints = await buildVideoConstraints();
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: await buildVideoConstraints(),
+    video: videoConstraints,
     audio: true,
   });
 
   state.stream = stream;
+  const [videoTrack] = stream.getVideoTracks();
+  if (videoTrack && 'contentHint' in videoTrack) {
+    try {
+      videoTrack.contentHint = 'motion';
+    } catch (error) {
+      console.warn('Unable to set contentHint', error);
+    }
+  }
   video.srcObject = stream;
   await ensureVideoReady();
   updateMirrorState();
@@ -213,23 +223,36 @@ async function startCamera() {
 
 async function buildVideoConstraints() {
   const mode = state.facingMode === 'environment' ? 'environment' : 'user';
+  const base = getBaseVideoSettings(mode);
   const cachedId = cachedDeviceIds[mode];
   if (cachedId) {
-    return { deviceId: { exact: cachedId } };
+    return {
+      ...base,
+      deviceId: { exact: cachedId },
+    };
   }
   if (mode !== 'environment') {
-    return { facingMode: { ideal: 'user' } };
+    return {
+      ...base,
+      facingMode: { ideal: 'user' },
+    };
   }
   try {
     const mainCamId = await getMainBackCameraDeviceId();
     if (mainCamId) {
       cachedDeviceIds.environment = mainCamId;
-      return { deviceId: { exact: mainCamId } };
+      return {
+        ...base,
+        deviceId: { exact: mainCamId },
+      };
     }
   } catch (error) {
     console.warn('Main camera detection failed', error);
   }
-  return { facingMode: { ideal: 'environment' } };
+  return {
+    ...base,
+    facingMode: { ideal: 'environment' },
+  };
 }
 
 async function getMainBackCameraDeviceId() {
@@ -250,6 +273,22 @@ async function getMainBackCameraDeviceId() {
   if (backCams.length) return backCams[0].deviceId;
 
   return videoInputs[0].deviceId;
+}
+
+function getBaseVideoSettings(mode) {
+  if (mode === 'environment') {
+    return {
+      width: { ideal: 3840, max: 3840 },
+      height: { ideal: 2160, max: 2160 },
+      frameRate: { ideal: 30, max: 30 },
+      advanced: [{ zoom: 1 }],
+    };
+  }
+  return {
+    width: { ideal: 1920, max: 1920 },
+    height: { ideal: 1080, max: 1080 },
+    frameRate: { ideal: 30, max: 30 },
+  };
 }
 
 function startRenderer() {
@@ -1004,6 +1043,14 @@ function drawVideoToContext(context, source, targetWidth, targetHeight) {
   const mapping = computeDrawMapping(sourceWidth, sourceHeight, targetWidth, targetHeight);
   const mirror = source === video && state.facingMode === 'user';
   context.save();
+  context.imageSmoothingEnabled = true;
+  if ('imageSmoothingQuality' in context) {
+    context.imageSmoothingQuality = 'high';
+  }
+  const isLiveSource = source === video;
+  if ('filter' in context) {
+    context.filter = isLiveSource ? PREVIEW_FILTER : 'none';
+  }
   if (mirror) {
     context.translate(targetWidth, 0);
     context.scale(-1, 1);
