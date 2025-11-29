@@ -120,6 +120,10 @@ body {
   display: none;
 }
 
+body.front-camera #camera-page .viewbox::after {
+  display: none;
+}
+
 #export-page .viewbox::after,
 #export-page #live-watermark {
   display: none;

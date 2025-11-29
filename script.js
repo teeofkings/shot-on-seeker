@@ -25,13 +25,23 @@ const CAMERA_KEYWORDS = {
 };
 const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
-const SHARE_CAPTURE_FPS = 24;
+const SHARE_CAPTURE_FPS = 20;
 const EXPORT_SCALE = 3;
-const RENDER_FPS = 24;
+const RECORDING_SCALE = 3;
+const RENDER_FPS = 20;
+const VIDEO_BITRATE = 8_000_000;
+const SHARE_VIDEO_BITRATE = 5_000_000;
 const PREVIEW_FILTERS = {
   environment: 'brightness(1.05) contrast(0.95)',
-  user: 'none',
+  user: 'brightness(1.06) contrast(0.92)',
 };
+const VIDEO_MIME_CANDIDATES = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+];
 
 const state = {
   mediaRecorder: null,
@@ -54,6 +64,7 @@ const state = {
   shareRecorderActive: false,
   shareFallbackPending: false,
   pendingShareBlob: null,
+  activeOverlayMode: 'environment',
 };
 
 let watermarkMetrics = null;
@@ -315,7 +326,7 @@ function startRenderer() {
       return;
     }
 
-    const hiSize = getHiResDimensions(baseSize.width, baseSize.height);
+    const hiSize = getHiResDimensions(baseSize.width, baseSize.height, RECORDING_SCALE);
     if (state.renderCanvas.width !== hiSize.width || state.renderCanvas.height !== hiSize.height) {
       state.renderCanvas.width = hiSize.width;
       state.renderCanvas.height = hiSize.height;
@@ -323,7 +334,7 @@ function startRenderer() {
 
     state.renderCtx.clearRect(0, 0, hiSize.width, hiSize.height);
     drawVideoToContext(state.renderCtx, video, hiSize.width, hiSize.height);
-    drawOverlay(state.renderCtx, hiSize.width, hiSize.height);
+    drawOverlay(state.renderCtx, hiSize.width, hiSize.height, state.activeOverlayMode);
     if (state.shareRecorderActive && state.shareCtx && state.shareCanvas) {
       drawShareFrame();
     }
@@ -349,6 +360,15 @@ function setupMediaRecorder() {
 
   if (!state.stream) return;
 
+  const previewSize = getTargetDimensions();
+  if (previewSize.width && previewSize.height) {
+    const hiSize = getHiResDimensions(previewSize.width, previewSize.height, RECORDING_SCALE);
+    if (hiSize.width && hiSize.height) {
+      state.renderCanvas.width = hiSize.width;
+      state.renderCanvas.height = hiSize.height;
+    }
+  }
+
   const canvasStream = state.renderCanvas.captureStream(RENDER_FPS);
   const mixedStream = new MediaStream();
   const [videoTrack] = canvasStream.getVideoTracks();
@@ -357,8 +377,13 @@ function setupMediaRecorder() {
     .getAudioTracks()
     .forEach((track) => mixedStream.addTrack(track));
 
-  const mimeType = getSupportedMimeType();
-  state.mediaRecorder = new MediaRecorder(mixedStream, mimeType ? { mimeType } : undefined);
+  const recorderOptions = buildRecorderOptions('main');
+  try {
+    state.mediaRecorder = new MediaRecorder(mixedStream, recorderOptions);
+  } catch (error) {
+    console.warn('Primary recorder fallback to default configuration', error);
+    state.mediaRecorder = new MediaRecorder(mixedStream);
+  }
   state.canvasStream = canvasStream;
   state.mixedStream = mixedStream;
   recordBtn.disabled = false;
@@ -396,8 +421,20 @@ function setupMediaRecorder() {
 
 function getSupportedMimeType() {
   if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
-  const candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';
+  return VIDEO_MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';
+}
+
+function buildRecorderOptions(kind = 'main') {
+  const options = {};
+  const mimeType = getSupportedMimeType();
+  if (mimeType) {
+    options.mimeType = mimeType;
+  }
+  const bitrate = kind === 'share' ? SHARE_VIDEO_BITRATE : VIDEO_BITRATE;
+  if (bitrate) {
+    options.bitsPerSecond = bitrate;
+  }
+  return options;
 }
 
 async function handleCapture() {
@@ -416,7 +453,7 @@ async function handleCapture() {
   hiCanvas.height = hiSize.height;
   const hiCtx = hiCanvas.getContext('2d');
   drawVideoToContext(hiCtx, video, hiSize.width, hiSize.height);
-  await stampOverlay(hiCtx, hiSize.width, hiSize.height);
+  await stampOverlay(hiCtx, hiSize.width, hiSize.height, state.facingMode);
 
   const originalBlob = await canvasToBlob(hiCanvas);
   const shareBlob = (await createSharePhotoBlob(hiCanvas)) || originalBlob;
@@ -440,18 +477,18 @@ async function ensureVideoReady() {
   });
 }
 
-async function stampOverlay(context, width, height) {
+async function stampOverlay(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
   if (!watermarkLoaded) {
     await watermarkReady.catch(() => {});
   }
-  drawOverlay(context, width, height);
+  drawOverlay(context, width, height, facingMode);
 }
 
-function drawOverlay(context, width, height) {
-  if (state.facingMode !== 'user') {
+function drawOverlay(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
+  if (facingMode !== 'user') {
     drawGradientOverlay(context, width, height);
   }
-  drawWatermarkImage(context, width, height);
+  drawWatermarkImage(context, width, height, facingMode);
 }
 
 function drawGradientOverlay(context, width, height) {
@@ -465,12 +502,12 @@ function drawGradientOverlay(context, width, height) {
   context.restore();
 }
 
-function drawWatermarkImage(context, width, height) {
+function drawWatermarkImage(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
   if (!watermarkLoaded || !watermarkImage.naturalWidth) return;
   const ratio = watermarkImage.naturalWidth / watermarkImage.naturalHeight;
   const metrics = ensureWatermarkMetrics();
   context.save();
-  context.globalAlpha = 0.98;
+  context.globalAlpha = facingMode === 'user' ? 1 : 0.98;
   if (metrics) {
     const drawWidth = width * metrics.widthRatio;
     const drawHeight = drawWidth / ratio;
@@ -534,6 +571,7 @@ function startRecording() {
   state.recordedChunks = [];
   const shareReady = setupShareRecording();
   state.shareFallbackPending = !shareReady;
+  state.activeOverlayMode = state.facingMode;
   startRenderer();
   state.mediaRecorder.start();
   if (shareReady && state.shareRecorder) {
@@ -659,7 +697,6 @@ function setupShareRecording() {
   if (!state.stream) return false;
   const baseSize = getTargetDimensions();
   if (!baseSize.width || !baseSize.height) return false;
-  const hiSize = getHiResDimensions(baseSize.width, baseSize.height);
   const shareWidth = SHARE_TARGET_WIDTH * EXPORT_SCALE;
   const shareHeight = SHARE_TARGET_HEIGHT * EXPORT_SCALE;
   if (!shareWidth || !shareHeight) return false;
@@ -678,9 +715,9 @@ function setupShareRecording() {
     .getAudioTracks()
     .forEach((track) => mixedStream.addTrack(track));
 
-  const mimeType = getSupportedMimeType();
+  const recorderOptions = buildRecorderOptions('share');
   try {
-    state.shareRecorder = new MediaRecorder(mixedStream, mimeType ? { mimeType } : undefined);
+    state.shareRecorder = new MediaRecorder(mixedStream, recorderOptions);
   } catch (error) {
     console.warn('Share recorder unavailable', error);
     videoStream.getTracks().forEach((track) => track.stop());
@@ -906,8 +943,9 @@ async function createShareVideoBlob(originalBlob) {
     playbackStream.getAudioTracks().forEach((track) => mixedStream.addTrack(track));
   }
   let recorder;
+  const recorderOptions = buildRecorderOptions('share');
   try {
-    recorder = new MediaRecorder(mixedStream, originalBlob.type ? { mimeType: originalBlob.type } : undefined);
+    recorder = new MediaRecorder(mixedStream, recorderOptions);
   } catch (error) {
     console.warn('Unable to instantiate MediaRecorder for share video', error);
     URL.revokeObjectURL(videoEl.src);
@@ -923,7 +961,8 @@ async function createShareVideoBlob(originalBlob) {
 
   const recordingPromise = new Promise((resolve) => {
     recorder.onstop = () => {
-      resolve(new Blob(chunks, { type: originalBlob.type || 'video/webm' }));
+      const mimeType = recorder.mimeType || originalBlob.type || (recorderOptions && recorderOptions.mimeType) || 'video/webm';
+      resolve(new Blob(chunks, { type: mimeType }));
     };
   });
 
@@ -1034,6 +1073,11 @@ function updateMirrorState() {
   if (viewbox) {
     viewbox.classList.toggle('no-gradient', shouldMirror);
   }
+  if (document.body) {
+    document.body.classList.toggle('front-camera', shouldMirror);
+    document.body.classList.toggle('back-camera', !shouldMirror);
+  }
+  state.activeOverlayMode = state.facingMode;
 }
 
 function getViewboxSize() {
@@ -1136,15 +1180,15 @@ function computeBottomCropMapping(sourceWidth, sourceHeight, targetWidth, target
   return { sx, sy, sw, sh };
 }
 
-function getHiResDimensions(baseWidth, baseHeight) {
+function getHiResDimensions(baseWidth, baseHeight, scale = EXPORT_SCALE) {
   if (!baseWidth || !baseHeight) {
     return { width: baseWidth, height: baseHeight, scale: 1 };
   }
-  const scale = Math.max(1, EXPORT_SCALE);
+  const safeScale = Math.max(1, scale);
   return {
-    width: Math.round(baseWidth * scale),
-    height: Math.round(baseHeight * scale),
-    scale,
+    width: Math.round(baseWidth * safeScale),
+    height: Math.round(baseHeight * safeScale),
+    scale: safeScale,
   };
 }
 
