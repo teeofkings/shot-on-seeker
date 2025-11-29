@@ -33,7 +33,7 @@ const VIDEO_BITRATE = 6_000_000;
 const SHARE_VIDEO_BITRATE = 5_000_000;
 const PREVIEW_FILTERS = {
   environment: 'brightness(1.05) contrast(0.95)',
-  user: 'brightness(1.1) contrast(0.88)',
+  user: 'brightness(1.15) contrast(0.86)',
 };
 const VIDEO_MIME_CANDIDATES = [
   'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
@@ -84,9 +84,6 @@ const exportState = {
 };
 
 state.renderCtx = state.renderCanvas.getContext('2d', { alpha: true });
-if (document.body) {
-  document.body.classList.add('back-camera');
-}
 
 const watermarkImage = new Image();
 watermarkImage.src = 'watermark.png';
@@ -402,6 +399,7 @@ function setupMediaRecorder() {
   };
 
   state.mediaRecorder.onstop = async () => {
+    stopRenderer();
     if (!state.recordedChunks.length) return;
     const blob = new Blob(state.recordedChunks, {
       type: state.mediaRecorder.mimeType || 'video/webm',
@@ -496,16 +494,11 @@ function drawOverlay(context, width, height, facingMode = state.activeOverlayMod
   drawWatermarkImage(context, width, height, facingMode);
 }
 
-function drawGradientOverlay(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
+function drawGradientOverlay(context, width, height) {
   const gradientHeight = Math.max(60, Math.round(height * (138 / 752)));
   const gradient = context.createLinearGradient(0, height - gradientHeight, 0, height);
-  if (facingMode === 'user') {
-    gradient.addColorStop(0, 'rgba(3, 3, 3, 0)');
-    gradient.addColorStop(1, 'rgba(6, 6, 6, 0.55)');
-  } else {
-    gradient.addColorStop(0, 'rgba(20, 63, 62, 0)');
-    gradient.addColorStop(1, '#143f3e');
-  }
+  gradient.addColorStop(0, 'rgba(20, 63, 62, 0)');
+  gradient.addColorStop(1, '#143f3e');
   context.save();
   context.fillStyle = gradient;
   context.fillRect(0, height - gradientHeight, width, gradientHeight);
@@ -609,7 +602,6 @@ function stopRecording() {
     }
   }
   setRecordingState(false);
-  stopRenderer();
 }
 
 function setRecordingState(isRecording) {
@@ -674,9 +666,6 @@ function showExportScreen(config) {
     exportPreview.innerHTML = `
       <div class="video-preview">
         <video data-preview-video playsinline preload="metadata" src="${config.previewUrl}"></video>
-        <button type="button" class="video-preview__play" data-preview-play aria-label="Play video">
-          <img src="icons/play_circle_fill.svg" alt="" aria-hidden="true">
-        </button>
       </div>
     `;
     wireVideoPreviewControls();
@@ -861,27 +850,16 @@ async function handleExportAction(kind) {
 
 function wireVideoPreviewControls() {
   const videoEl = exportPreview.querySelector('video');
-  const playButton = exportPreview.querySelector('[data-preview-play]');
-  if (!videoEl || !playButton) return;
+  if (!videoEl) return;
   videoEl.controls = true;
   videoEl.preload = 'auto';
   videoEl.playsInline = true;
-
-  const updatePlayButton = () => {
-    if (videoEl.paused || videoEl.ended) {
-      playButton.classList.remove('hidden');
-    } else {
-      playButton.classList.add('hidden');
+  videoEl.addEventListener('loadedmetadata', () => {
+    if (Number.isFinite(videoEl.duration)) {
+      videoEl.currentTime = 0;
+      videoEl.pause();
     }
-  };
-
-  playButton.addEventListener('click', () => {
-    videoEl.play().catch(() => {});
   });
-  videoEl.addEventListener('play', updatePlayButton);
-  videoEl.addEventListener('pause', updatePlayButton);
-  videoEl.addEventListener('ended', updatePlayButton);
-  updatePlayButton();
 }
 
 function canvasToBlob(canvas, type = 'image/png', quality = 0.95) {
@@ -1084,10 +1062,6 @@ function shutdownStream() {
 function updateMirrorState() {
   const shouldMirror = state.facingMode === 'user';
   video.classList.toggle('mirrored', shouldMirror);
-  if (document.body) {
-    document.body.classList.toggle('front-camera', shouldMirror);
-    document.body.classList.toggle('back-camera', !shouldMirror);
-  }
   state.activeOverlayMode = state.facingMode;
 }
 

@@ -116,10 +116,6 @@ body {
   background: linear-gradient(180deg, rgba(20, 63, 62, 0) 0%, #143F3E 116.53%);
 }
 
-.front-camera .viewbox::after {
-  background: linear-gradient(180deg, rgba(5, 5, 5, 0) 0%, rgba(10, 10, 10, 0.6) 110%);
-}
-
 #export-page .viewbox::after,
 #export-page #live-watermark {
   display: none;
@@ -300,27 +296,6 @@ body {
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-.video-preview__play {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: rgba(0, 0, 0, 0.3);
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.video-preview__play img {
-  width: 70px;
-  height: 70px;
-}
-
-.video-preview__play.hidden {
-  display: none;
 }
 
 .export-actions {
