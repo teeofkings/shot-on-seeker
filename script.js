@@ -27,7 +27,10 @@ const SHARE_TARGET_WIDTH = 480;
 const SHARE_TARGET_HEIGHT = 640;
 const SHARE_CAPTURE_FPS = 24;
 const EXPORT_SCALE = 3;
-const PREVIEW_FILTER = 'brightness(1.05) contrast(0.95)';
+const PREVIEW_FILTERS = {
+  environment: 'brightness(1.05) contrast(0.95)',
+  user: 'none',
+};
 
 const state = {
   mediaRecorder: null,
@@ -278,16 +281,16 @@ async function getMainBackCameraDeviceId() {
 function getBaseVideoSettings(mode) {
   if (mode === 'environment') {
     return {
-      width: { ideal: 3840, max: 3840 },
-      height: { ideal: 2160, max: 2160 },
-      frameRate: { ideal: 30, max: 30 },
+      width: { ideal: 2560, max: 3840 },
+      height: { ideal: 1440, max: 2160 },
+      frameRate: { ideal: 24, max: 30 },
       advanced: [{ zoom: 1 }],
     };
   }
   return {
     width: { ideal: 1920, max: 1920 },
     height: { ideal: 1080, max: 1080 },
-    frameRate: { ideal: 30, max: 30 },
+    frameRate: { ideal: 24, max: 30 },
   };
 }
 
@@ -1049,7 +1052,8 @@ function drawVideoToContext(context, source, targetWidth, targetHeight) {
   }
   const isLiveSource = source === video;
   if ('filter' in context) {
-    context.filter = isLiveSource ? PREVIEW_FILTER : 'none';
+    const filter = PREVIEW_FILTERS[state.facingMode] || 'none';
+    context.filter = isLiveSource ? filter : 'none';
   }
   if (mirror) {
     context.translate(targetWidth, 0);
