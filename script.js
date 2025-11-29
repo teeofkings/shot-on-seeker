@@ -32,7 +32,7 @@ const RENDER_FPS = 30;
 const VIDEO_BITRATE = 6_000_000;
 const SHARE_VIDEO_BITRATE = 5_000_000;
 const PREVIEW_FILTERS = {
-  environment: 'brightness(1.05) contrast(0.95) blur(0.35px)',
+  environment: 'brightness(1.05) contrast(0.95)',
   user: 'brightness(1.15) contrast(0.86) blur(0.3px)',
 };
 const VIDEO_MIME_CANDIDATES = [
@@ -296,10 +296,10 @@ async function getMainBackCameraDeviceId() {
 function getBaseVideoSettings(mode) {
   if (mode === 'environment') {
     return {
-      width: { ideal: 1920, max: 2560 },
-      height: { ideal: 1080, max: 1440 },
+      width: { ideal: 2560, max: 3840 },
+      height: { ideal: 1440, max: 2160 },
       frameRate: { ideal: 24, max: 30 },
-      advanced: [{ zoom: 1 }, { imageStabilization: 'on' }, { videoStabilizationMode: 'on' }],
+      advanced: [{ zoom: 1 }],
     };
   }
   return {
