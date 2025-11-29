@@ -33,7 +33,7 @@ const VIDEO_BITRATE = 6_000_000;
 const SHARE_VIDEO_BITRATE = 5_000_000;
 const PREVIEW_FILTERS = {
   environment: 'brightness(1.05) contrast(0.95)',
-  user: 'brightness(1.15) contrast(0.86)',
+  user: 'brightness(1.15) contrast(0.86) blur(0.3px)',
 };
 const VIDEO_MIME_CANDIDATES = [
   'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
@@ -303,9 +303,11 @@ function getBaseVideoSettings(mode) {
     };
   }
   return {
-    width: { ideal: 1920, max: 1920 },
-    height: { ideal: 1080, max: 1080 },
+    facingMode: { ideal: 'user' },
+    width: { ideal: 1280, max: 1280 },
+    height: { ideal: 720, max: 720 },
     frameRate: { ideal: 24, max: 30 },
+    advanced: [{ colorSpace: 'srgb' }],
   };
 }
 
