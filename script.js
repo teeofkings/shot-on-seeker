@@ -1178,4 +1178,3 @@ function getHiResDimensions(baseWidth, baseHeight, scale = EXPORT_SCALE) {
     scale: safeScale,
   };
 }
-

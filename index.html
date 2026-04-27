@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Seeker Camera App</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#000000">
   <link rel="stylesheet" href="styles.css">
   <meta name="description" content="Flex your shots with Shot on Seeker, the Solana Mobile watermark camera.">
   <meta property="og:title" content="Shot on Seeker">
@@ -74,5 +76,16 @@
 
   <canvas id="canvas" class="offscreen" aria-hidden="true"></canvas>
   <script src="script.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then((registration) => {
+          console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        }).catch((err) => {
+          console.log('ServiceWorker registration failed: ', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
