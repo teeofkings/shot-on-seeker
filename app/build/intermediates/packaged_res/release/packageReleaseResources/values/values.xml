@@ -29,6 +29,6 @@
     <string name="launchUrl" translatable="false">https://shot-on-seeker.vercel.app/</string>
     <string name="launcherName" translatable="false">ShotonSeeker</string>
     <string name="orientation" translatable="false">default</string>
-    <string name="providerAuthority" translatable="false">app.vercel.shot_on_seeker.twa.fileprovider</string>
+    <string name="providerAuthority" translatable="false">app.vercel.shotonseeker.fileprovider</string>
     <string name="webManifestUrl" translatable="false">https://shot-on-seeker.vercel.app/manifest.json</string>
 </resources>

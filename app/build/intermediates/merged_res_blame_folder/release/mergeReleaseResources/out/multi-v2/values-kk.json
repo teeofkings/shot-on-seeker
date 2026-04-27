@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "app.vercel.shot_on_seeker.twa.app-mergeReleaseResources-23:/values-kk/values-kk.xml",
+            "outputFile": "app.vercel.shotonseeker.app-mergeReleaseResources-23:/values-kk/values-kk.xml",
             "map": [
                 {
                     "source": "/Users/apple/.gradle/caches/8.11.1/transforms/183ebbc8ed821348f80a6d36d20b75e3/transformed/appcompat-1.7.0/res/values-kk/values-kk.xml",

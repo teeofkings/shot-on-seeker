@@ -217,6 +217,9 @@ async function startCamera() {
   stopRenderer();
   shutdownStream();
 
+  // Add a small delay to ensure previous stream is fully released by Android hardware
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
   const videoConstraints = await buildVideoConstraints();
   const stream = await navigator.mediaDevices.getUserMedia({
     video: videoConstraints,
@@ -1036,6 +1039,14 @@ async function shareToX(blob, filename) {
 
 function shutdownStream() {
   stopRenderer();
+  
+  if (video) {
+    video.pause();
+    video.srcObject = null;
+    video.removeAttribute('src');
+    video.load();
+  }
+
   if (state.isRecording) {
     try {
       state.mediaRecorder?.stop();

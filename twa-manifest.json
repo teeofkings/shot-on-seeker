@@ -1,5 +1,5 @@
 {
-  "packageId": "app.vercel.shot_on_seeker.twa",
+  "packageId": "app.vercel.shotonseeker",
   "host": "shot-on-seeker.vercel.app",
   "name": "Shot on Seeker",
   "launcherName": "ShotonSeeker",
@@ -20,8 +20,8 @@
     "path": "/Users/apple/Desktop/shot-on-seeker/android.keystore",
     "alias": "android"
   },
-  "appVersionName": "1",
-  "appVersionCode": 1,
+  "appVersionName": "2",
+  "appVersionCode": 2,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://shot-on-seeker.vercel.app/manifest.json",
@@ -43,5 +43,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1"
+  "appVersion": "2"
 }

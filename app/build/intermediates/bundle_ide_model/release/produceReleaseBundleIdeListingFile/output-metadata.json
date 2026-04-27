@@ -4,7 +4,7 @@
     "type": "BUNDLE",
     "kind": "RegularFile"
   },
-  "applicationId": "app.vercel.shot_on_seeker.twa",
+  "applicationId": "app.vercel.shotonseeker",
   "variantName": "release",
   "elements": [
     {

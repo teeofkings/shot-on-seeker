@@ -7668,15 +7668,15 @@ androidx.viewpager.widget.ViewPager$SavedState
 androidx.viewpager.widget.ViewPager$SimpleOnPageChangeListener
 androidx.viewpager.widget.ViewPager$ViewPositionComparator
 androidx.viewpager.widget.ViewPager
-app.vercel.shot_on_seeker.twa.R$bool
-app.vercel.shot_on_seeker.twa.R$color
-app.vercel.shot_on_seeker.twa.R$drawable
-app.vercel.shot_on_seeker.twa.R$integer
-app.vercel.shot_on_seeker.twa.R$mipmap
-app.vercel.shot_on_seeker.twa.R$raw
-app.vercel.shot_on_seeker.twa.R$string
-app.vercel.shot_on_seeker.twa.R$xml
-app.vercel.shot_on_seeker.twa.R
+app.vercel.shotonseeker.R$bool
+app.vercel.shotonseeker.R$color
+app.vercel.shotonseeker.R$drawable
+app.vercel.shotonseeker.R$integer
+app.vercel.shotonseeker.R$mipmap
+app.vercel.shotonseeker.R$raw
+app.vercel.shotonseeker.R$string
+app.vercel.shotonseeker.R$xml
+app.vercel.shotonseeker.R
 com.google.androidbrowserhelper.BuildConfig
 com.google.androidbrowserhelper.R$drawable:
     private void <init>()

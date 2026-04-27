@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "app.vercel.shot_on_seeker.twa.app-mergeReleaseResources-23:/values-hr/values-hr.xml",
+            "outputFile": "app.vercel.shotonseeker.app-mergeReleaseResources-23:/values-hr/values-hr.xml",
             "map": [
                 {
                     "source": "/Users/apple/.gradle/caches/8.11.1/transforms/be57bd43967b699c12a0f6b8bd2f21c6/transformed/browser-1.9.0-alpha04/res/values-hr/values-hr.xml",

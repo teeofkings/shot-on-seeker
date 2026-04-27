@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package app.vercel.shot_on_seeker.twa;
+package app.vercel.shotonseeker;
 
 
 

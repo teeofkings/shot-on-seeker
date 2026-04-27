@@ -3,8 +3,8 @@
 # min_api: 21
 # common_typos_disable
 # {"id":"com.android.tools.r8.mapping","version":"2.2"}
-# pg_map_id: 92d36d7
-# pg_map_hash: SHA-256 92d36d713d0355a85d2efb8655379aee655672704e325177767b3e69f9217098
+# pg_map_id: d007a2d
+# pg_map_hash: SHA-256 d007a2da1e138865a1c369f4f34578267f8f129d1085088de2167ba0e8e2d6a0
 android.support.customtabs.ICustomTabsCallback -> a.a:
 # {"id":"sourceFile","fileName":"ICustomTabsCallback.java"}
     java.lang.String DESCRIPTOR -> a
@@ -22694,15 +22694,15 @@ androidx.versionedparcelable.VersionedParcelParcel -> androidx.versionedparcelab
     1:6:void writeBoolean(boolean):181:181 -> y
 androidx.versionedparcelable.VersionedParcelable -> H.a:
 # {"id":"sourceFile","fileName":"VersionedParcelable.java"}
-app.vercel.shot_on_seeker.twa.Application -> app.vercel.shot_on_seeker.twa.Application:
+app.vercel.shotonseeker.Application -> app.vercel.shotonseeker.Application:
 # {"id":"sourceFile","fileName":"Application.java"}
     1:4:void <init>():20:20 -> <init>
     1:4:void onCreate():26:26 -> onCreate
-app.vercel.shot_on_seeker.twa.DelegationService -> app.vercel.shot_on_seeker.twa.DelegationService:
+app.vercel.shotonseeker.DelegationService -> app.vercel.shotonseeker.DelegationService:
 # {"id":"sourceFile","fileName":"DelegationService.java"}
     1:4:void <init>():5:5 -> <init>
     1:4:void onCreate():9:9 -> onCreate
-app.vercel.shot_on_seeker.twa.LauncherActivity -> app.vercel.shot_on_seeker.twa.LauncherActivity:
+app.vercel.shotonseeker.LauncherActivity -> app.vercel.shotonseeker.LauncherActivity:
 # {"id":"sourceFile","fileName":"LauncherActivity.java"}
     1:4:void <init>():25:25 -> <init>
     1:5:android.net.Uri getLaunchingUrl():48:48 -> i

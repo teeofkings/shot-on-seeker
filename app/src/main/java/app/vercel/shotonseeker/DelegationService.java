@@ -1,4 +1,4 @@
-package app.vercel.shot_on_seeker.twa;
+package app.vercel.shotonseeker;
 
 
 

@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "app.vercel.shot_on_seeker.twa.app-mergeReleaseResources-23:/values-iw/values-iw.xml",
+            "outputFile": "app.vercel.shotonseeker.app-mergeReleaseResources-23:/values-iw/values-iw.xml",
             "map": [
                 {
                     "source": "/Users/apple/.gradle/caches/8.11.1/transforms/a5429f7b20c607b890f08b5283ad4ec0/transformed/core-1.13.0/res/values-iw/values-iw.xml",
