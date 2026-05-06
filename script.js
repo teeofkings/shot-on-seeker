@@ -1030,16 +1030,10 @@ function clearError() {
 async function shareToX(blob, filename) {
   const shareText = 'Your Seeker isn’t complete until you try this...\n\nFlex your shots with #ShotOnSeeker\n\nhttps://shot-on-seeker.vercel.app';
   
-  // Android blocks sharing .webm files natively. We spoof it as .mp4 to force the Share Sheet to accept it!
-  let shareType = blob.type;
-  let shareFilename = filename;
-  
-  if (filename.endsWith('.webm') || blob.type.includes('webm')) {
-    shareType = 'video/mp4';
-    shareFilename = filename.replace('.webm', '.mp4');
-  }
-  
-  const file = new File([blob], shareFilename, { type: shareType });
+  // Strip out complex codec strings (e.g. video/webm;codecs=vp8) which crash Android Web Share API
+  // We must keep the exact format Chrome generates to pass its security validators
+  const cleanType = blob.type.split(';')[0];
+  const file = new File([blob], filename, { type: cleanType });
 
   // Native share sheet for Mobile users
   if (navigator.share) {
