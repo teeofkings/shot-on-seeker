@@ -1030,26 +1030,21 @@ function clearError() {
 async function shareToX(blob, filename) {
   const shareText = 'Your Seeker isn’t complete until you try this...\n\nFlex your shots with #ShotOnSeeker\n\nhttps://shot-on-seeker.vercel.app';
   
-  // Strip out complex codec strings (e.g. video/webm;codecs=vp8) which crash Android Web Share API
-  // We must keep the exact format Chrome generates to pass its security validators
+  // Format MIME type for native share compatibility
   const cleanType = blob.type.split(';')[0];
   const file = new File([blob], filename, { type: cleanType });
 
-  // Native share sheet for Mobile users
   if (navigator.share) {
     try {
-      // By omitting text/title, we force Android to send a strict media intent instead of a mixed text/plain intent
-      await navigator.share({
-        files: [file]
-      });
-      return; 
+      await navigator.share({ files: [file] });
+      return;
     } catch (error) {
       if (error.name === 'AbortError') return;
       console.warn('Native share failed, falling back:', error);
     }
   }
 
-  // Fallback for Desktop users (Downloads file + opens web intent)
+  // Fallback for devices without native share support
   downloadBlob(blob, filename);
   const tweetUrl = new URL('https://twitter.com/intent/tweet');
   tweetUrl.searchParams.set('text', shareText);
