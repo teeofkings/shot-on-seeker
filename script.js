@@ -1041,18 +1041,17 @@ async function shareToX(blob, filename) {
   
   const file = new File([blob], shareFilename, { type: shareType });
 
-  // Native share sheet for Mobile users (Attaches image/video directly to X app!)
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  // Native share sheet for Mobile users
+  if (navigator.share) {
     try {
+      // By omitting text/title, we force Android to send a strict media intent instead of a mixed text/plain intent
       await navigator.share({
-        title: 'Shot on Seeker',
-        text: shareText,
         files: [file]
       });
       return; 
     } catch (error) {
       if (error.name === 'AbortError') return;
-      // If it fails, let it fall through to the desktop fallback
+      console.warn('Native share failed, falling back:', error);
     }
   }
 
