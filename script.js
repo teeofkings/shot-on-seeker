@@ -96,7 +96,7 @@ if ('decode' in watermarkImage) {
     .then(() => {
       watermarkLoaded = true;
     })
-    .catch(() => {});
+    .catch(() => { });
 } else {
   watermarkReady = new Promise((resolve) => {
     watermarkImage.onload = () => {
@@ -489,7 +489,7 @@ async function ensureVideoReady() {
 
 async function stampOverlay(context, width, height, facingMode = state.activeOverlayMode || state.facingMode) {
   if (!watermarkLoaded) {
-    await watermarkReady.catch(() => {});
+    await watermarkReady.catch(() => { });
   }
   drawOverlay(context, width, height, facingMode);
 }
@@ -980,7 +980,7 @@ async function createShareVideoBlob(originalBlob) {
     );
     requestAnimationFrame(drawFrame);
   };
-  await videoEl.play().catch(() => {});
+  await videoEl.play().catch(() => { });
   drawFrame();
   await waitForVideoEnd(videoEl);
   recorder.stop();
@@ -1028,18 +1028,34 @@ function clearError() {
 }
 
 async function shareToX(blob, filename) {
+  const shareText = 'Your Seeker isn’t complete until you try this...\n\nFlex your shots with #ShotOnSeeker\n\nhttps://shot-on-seeker.vercel.app';
+  const file = new File([blob], filename, { type: blob.type });
+
+  // Native share sheet for Mobile users (Attaches image directly to X app!)
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: 'Shot on Seeker',
+        text: shareText,
+        files: [file]
+      });
+      return; 
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      // If it fails, let it fall through to the desktop fallback
+    }
+  }
+
+  // Fallback for Desktop users (Downloads file + opens web intent)
   downloadBlob(blob, filename);
-  const tweetUrl = new URL('https://x.com/intent/tweet');
-  tweetUrl.searchParams.set(
-    'text',
-    'Your Seeker isn’t complete until you try this...\n\nFlex your shots with Shot on Seeker.\n\nhttps://shot-on-seeker.vercel.app'
-  );
+  const tweetUrl = new URL('https://twitter.com/intent/tweet');
+  tweetUrl.searchParams.set('text', shareText);
   window.open(tweetUrl.toString(), '_blank', 'noopener');
 }
 
 function shutdownStream() {
   stopRenderer();
-  
+
   if (video) {
     video.pause();
     video.srcObject = null;

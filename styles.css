@@ -234,6 +234,7 @@ body {
 .gate {
   text-align: center;
   gap: 12px;
+  justify-content: center;
 }
 
 .gate.hidden {
@@ -256,6 +257,8 @@ body {
 .gate p {
   margin: 0;
   color: var(--text-muted);
+  line-height: 1.4;
+  max-width: 320px;
 }
 
 .hidden {
@@ -314,8 +317,3 @@ body {
 .export-actions .label {
   white-space: nowrap;
 }
-
-
-
-
-

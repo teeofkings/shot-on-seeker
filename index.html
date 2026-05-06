@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,15 +10,18 @@
   <link rel="stylesheet" href="styles.css">
   <meta name="description" content="Flex your shots with Shot on Seeker, the Solana Mobile watermark camera.">
   <meta property="og:title" content="Shot on Seeker">
-  <meta property="og:description" content="Your Seeker isn’t complete until you try this. Flex your shots with Shot on Seeker.">
+  <meta property="og:description"
+    content="Your Seeker isn’t complete until you try this. Flex your shots with Shot on Seeker.">
   <meta property="og:url" content="https://shot-on-seeker.vercel.app">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://shot-on-seeker.vercel.app/preview-v2.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Shot on Seeker">
-  <meta name="twitter:description" content="Capture and share crisp watermark shots straight from your Solana Mobile Seeker.">
+  <meta name="twitter:description"
+    content="Capture and share crisp watermark shots straight from your Solana Mobile Seeker.">
   <meta name="twitter:image" content="https://shot-on-seeker.vercel.app/preview-v2.png">
 </head>
+
 <body>
   <main class="app">
     <section id="camera-page" class="device hidden" aria-live="polite">
@@ -33,7 +37,7 @@
         </button>
 
         <button id="record" type="button" class="control pill">
-        <img src="icons/camcorder_line.svg" alt="" aria-hidden="true" class="icon-img" data-record-icon>
+          <img src="icons/camcorder_line.svg" alt="" aria-hidden="true" class="icon-img" data-record-icon>
           <span class="label" data-record-label>Record</span>
         </button>
 
@@ -67,10 +71,14 @@
       </div>
     </section>
 
-    <section id="seeker-gate" class="gate hidden" aria-live="assertive">
+    <section id="seeker-gate" class="gate hidden" aria-live="assertive" style="position: relative;">
       <p class="gate-eyebrow">Seeker only</p>
       <h1>This build stays on-device</h1>
       <p>Open the link inside the Solana Mobile Seeker to unlock the watermark camera.</p>
+      <footer style="position: absolute; bottom: 2rem; width: 100%; font-size: 0.875rem; opacity: 0.7;">
+        <a href="/privacy.html" style="color: inherit; margin-right: 1rem;">Privacy Policy</a>
+        <a href="/terms.html" style="color: inherit;">Terms of Use</a>
+      </footer>
     </section>
   </main>
 
@@ -88,4 +96,5 @@
     }
   </script>
 </body>
+
 </html>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'seeker-camera-v1';
+const CACHE_NAME = 'seeker-camera-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
