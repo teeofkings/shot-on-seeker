@@ -850,7 +850,7 @@ async function handleExportAction(kind) {
   } else {
     downloadBlob(blob, filename);
   }
-  hideExportScreen();
+  // Let the user decide when to close the export screen using the close button
 }
 
 function wireVideoPreviewControls() {
@@ -1029,9 +1029,19 @@ function clearError() {
 
 async function shareToX(blob, filename) {
   const shareText = 'Your Seeker isn’t complete until you try this...\n\nFlex your shots with #ShotOnSeeker\n\nhttps://shot-on-seeker.vercel.app';
-  const file = new File([blob], filename, { type: blob.type });
+  
+  // Android blocks sharing .webm files natively. We spoof it as .mp4 to force the Share Sheet to accept it!
+  let shareType = blob.type;
+  let shareFilename = filename;
+  
+  if (filename.endsWith('.webm') || blob.type.includes('webm')) {
+    shareType = 'video/mp4';
+    shareFilename = filename.replace('.webm', '.mp4');
+  }
+  
+  const file = new File([blob], shareFilename, { type: shareType });
 
-  // Native share sheet for Mobile users (Attaches image directly to X app!)
+  // Native share sheet for Mobile users (Attaches image/video directly to X app!)
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({
